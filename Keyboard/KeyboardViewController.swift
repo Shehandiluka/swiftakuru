@@ -11,7 +11,6 @@ final class KeyboardViewController: UIInputViewController {
     let keys = KeyboardView()
     let panelHost = UIView()
     private var heightC: NSLayoutConstraint?
-    private var keysHeightC: NSLayoutConstraint?
     var panel: UIView?
 
     var page: KeyPage = .letters
@@ -70,21 +69,37 @@ final class KeyboardViewController: UIInputViewController {
             bar.topAnchor.constraint(equalTo: view.topAnchor), bar.heightAnchor.constraint(equalToConstant: Self.barHeight),
             keys.leadingAnchor.constraint(equalTo: view.leadingAnchor), keys.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             keys.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            keys.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -3),
             panelHost.leadingAnchor.constraint(equalTo: view.leadingAnchor), panelHost.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             panelHost.topAnchor.constraint(equalTo: bar.bottomAnchor), panelHost.bottomAnchor.constraint(equalTo: keys.bottomAnchor),
         ])
-        keysHeightC = keys.heightAnchor.constraint(equalToConstant: keyArea)
-        keysHeightC?.isActive = true
-        let h = view.heightAnchor.constraint(equalToConstant: Self.barHeight + keyArea + 4)
-        h.priority = UILayoutPriority(999)
-        h.isActive = true
-        heightC = h
         panelHost.isHidden = true
         applySettings()
     }
 
+    /// iOS ignores a height constraint added before the keyboard is on screen (it then squeezes it to ~216 pt),
+    /// so it is (re)applied here and in viewDidAppear.
+    private func ensureHeight() {
+        let want = Self.barHeight + keyArea + 3
+        if heightC == nil {
+            let h = view.heightAnchor.constraint(equalToConstant: want)
+            h.priority = UILayoutPriority(999)
+            h.isActive = true
+            heightC = h
+        } else if heightC?.constant != want {
+            heightC?.constant = want
+        }
+        view.setNeedsLayout()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        ensureHeight()
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        ensureHeight()
         applySettings()
         if hasFullAccess { ClipboardStore.shared.capture() }
         let kt = textDocumentProxy.keyboardType ?? .default
@@ -121,8 +136,7 @@ final class KeyboardViewController: UIInputViewController {
         } else { bgImage.image = nil; bgImage.isHidden = true }
         keys.theme = theme
         bar.theme = theme
-        keysHeightC?.constant = keyArea
-        heightC?.constant = Self.barHeight + keyArea + 4
+        if heightC != nil { ensureHeight() }
         rebuildKeys()
         refreshBar()
         (panel as? ThemedPanel)?.applyTheme(theme)
@@ -137,7 +151,6 @@ final class KeyboardViewController: UIInputViewController {
         case .sinhala1, .sinhala2, .sinhala3: specs = KeyLayout.sinhalaPage(page, showGlobe: globe)
         }
         keys.shiftState = shift
-        keys.rowHeight = keyArea / CGFloat(max(1, specs.count))
         keys.setRows(specs)
         // return key label
         for b in keys.rows.flatMap({ $0 }) {

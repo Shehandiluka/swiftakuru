@@ -11,7 +11,7 @@ final class KeyButton: UIControl {
         self.spec = spec
         super.init(frame: .zero)
         bg.isUserInteractionEnabled = false
-        bg.layer.cornerRadius = 6
+        bg.layer.cornerRadius = 8
         bg.layer.shadowOffset = CGSize(width: 0, height: 1)
         bg.layer.shadowRadius = 0
         bg.layer.shadowOpacity = 1
@@ -34,11 +34,11 @@ final class KeyButton: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        bg.frame = bounds.insetBy(dx: 3, dy: 5)
+        bg.frame = bounds.insetBy(dx: 3, dy: 5.5)
         label.frame = bg.bounds.insetBy(dx: 2, dy: 0)
         hintLabel.frame = CGRect(x: 0, y: 1, width: bg.bounds.width - 4, height: 12)
         icon.frame = bg.bounds
-        bg.layer.shadowPath = UIBezierPath(roundedRect: bg.bounds.offsetBy(dx: 0, dy: 1), cornerRadius: 6).cgPath
+        bg.layer.shadowPath = UIBezierPath(roundedRect: bg.bounds.offsetBy(dx: 0, dy: 1), cornerRadius: 8).cgPath
     }
 
     func apply(theme t: KBTheme, highlighted: Bool = false, active: Bool = false) {
@@ -127,6 +127,8 @@ final class KeyboardView: UIView {
         super.layoutSubviews()
         let W = bounds.width
         let side: CGFloat = 0
+        // rows share whatever height iOS gives us, so every page always fills the keyboard evenly
+        if !rows.isEmpty, bounds.height > 0 { rowHeight = bounds.height / CGFloat(rows.count) }
         for (ri, row) in rows.enumerated() {
             let units = row.reduce(CGFloat(0)) { $0 + $1.spec.width }
             // keep standard key width for rows with fewer keys (center them)

@@ -26,7 +26,7 @@ final class SharedStore {
         defaults.register(defaults: [
             K.layout: "singlish", K.theme: "swift", K.sound: true, K.haptics: true, K.autoCap: true, K.autocorrect: true,
             K.doubleSpace: true, K.livePreview: true, K.keyHints: true, K.numberRow: false, K.aiProvider: "gemini",
-            K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 53.0,
+            K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 50.0,
             K.emojiSuggest: true, K.learnWords: true,
         ])
     }

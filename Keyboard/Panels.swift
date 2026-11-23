@@ -505,7 +505,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         header("KEY SIZE")
         let seg = UISegmentedControl(items: ["Small", "Medium", "Large"])
         let h = store.keyHeight
-        seg.selectedSegmentIndex = h < 50 ? 0 : (h > 56 ? 2 : 1)
+        seg.selectedSegmentIndex = h < 48 ? 0 : (h > 53 ? 2 : 1)
         seg.selectedSegmentTintColor = theme.accent
         seg.setTitleTextAttributes([.foregroundColor: theme.keyText], for: .normal)
         seg.addTarget(self, action: #selector(sizeChanged(_:)), for: .valueChanged)
@@ -562,7 +562,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         applyTheme(KBTheme.named(store.themeId))
     }
     @objc private func sizeChanged(_ s: UISegmentedControl) {
-        store.keyHeight = [47.0, 53.0, 59.0][s.selectedSegmentIndex]
+        store.keyHeight = [45.0, 50.0, 56.0][s.selectedSegmentIndex]
         kb?.applySettings()
     }
     @objc private func aiChanged(_ s: UISegmentedControl) {
