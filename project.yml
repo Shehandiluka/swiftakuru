@@ -1,0 +1,71 @@
+name: SwiftAkuru
+options:
+  bundleIdPrefix: store.swiftpaypos
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""            # put your Apple Team ID here when you have a paid account
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  SwiftAkuru:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    dependencies:
+      - target: SwiftAkuruKeyboard
+        embed: true
+    entitlements:
+      path: App/SwiftAkuru.entitlements
+      properties:
+        com.apple.security.application-groups: [group.store.swiftpaypos.swiftakuru]
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Swift Akuru
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        NSPhotoLibraryUsageDescription: Keyboard background එකට photo එකක් තෝරන්න.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+  SwiftAkuruKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Keyboard
+      - path: Shared
+    entitlements:
+      path: Keyboard/SwiftAkuruKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups: [group.store.swiftpaypos.swiftakuru]
+    info:
+      path: Keyboard/Info.plist
+      properties:
+        CFBundleDisplayName: Swift Akuru
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: si-LK
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru.keyboard
+        APPLICATION_EXTENSION_API_ONLY: YES
