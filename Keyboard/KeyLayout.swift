@@ -7,7 +7,10 @@ enum KeyKind: Equatable {
     case spacer
 }
 
-enum KeyPage: Equatable { case letters, numbers, symbols, sinhala1, sinhala2 }
+enum KeyPage: Equatable {
+    case letters, numbers, symbols, sinhala1, sinhala2, sinhala3
+    var isSinhala: Bool { self == .sinhala1 || self == .sinhala2 || self == .sinhala3 }
+}
 
 /// One alternate shown on long-press: what is displayed and what is typed.
 /// In Singlish mode `value` is roman appended to the word being composed; `direct` = insert as-is.
@@ -94,7 +97,7 @@ enum KeyLayout {
         var r: [KeySpec] = [KeySpec(kind: .page(page == .letters ? .numbers : .letters), label: page == .letters ? "123" : "ABC", width: 1.3)]
         if showGlobe { r.append(KeySpec(kind: .globe, label: "globe", width: 1.1)) }
         r.append(KeySpec(kind: .emoji, label: "emoji", width: 1.1))
-        if singlish { r.append(KeySpec(kind: .page(page == .sinhala1 || page == .sinhala2 ? .letters : .sinhala1), label: page == .sinhala1 || page == .sinhala2 ? "abc" : "අ", width: 1.1)) }
+        if singlish { r.append(KeySpec(kind: .page(page.isSinhala ? .letters : .sinhala1), label: page.isSinhala ? "abc" : "අ", width: 1.1)) }
         r.append(KeySpec(kind: .space, label: singlish ? "සිංහල" : "English", width: showGlobe ? 3.6 : 4.4))
         r.append(KeySpec(kind: .lang, label: singlish ? "EN" : "සිං", width: 1.1))
         r.append(KeySpec(kind: .ret, label: "return", width: 1.9))
@@ -115,27 +118,32 @@ enum KeyLayout {
         ]
     }
 
-    // Sinhala letters, typed directly (for rare letters & signs)
-    static let sinhala1: [[String]] = [
-        ["අ", "ආ", "ඇ", "ඈ", "ඉ", "ඊ", "උ", "ඌ", "එ", "ඒ"],
-        ["ඔ", "ඕ", "ඓ", "ඖ", "ඍ", "ඎ", "ං", "ඃ", "ඞ", "ඥ"],
-        ["ක", "ඛ", "ග", "ඝ", "ඟ", "ච", "ඡ", "ජ", "ඣ", "ඤ"],
-    ]
-    static let sinhala2: [[String]] = [
-        ["ට", "ඨ", "ඩ", "ඪ", "ණ", "ඬ", "ත", "ථ", "ද", "ධ"],
-        ["න", "ඳ", "ප", "ඵ", "බ", "භ", "ම", "ඹ", "ය", "ර"],
-        ["ල", "ව", "ශ", "ෂ", "ස", "හ", "ළ", "ෆ", "ඦ", "ඏ"],
-        ["්", "ා", "ැ", "ෑ", "ි", "ී", "ු", "ූ", "ෘ", "ෙ"],
-        ["ේ", "ෛ", "ො", "ෝ", "ෞ", "ෟ", "ෲ", "\u{200D}", "෴", "ඐ"],
+    // Sinhala letters, typed directly (3 pages × [10, 10, 8] keys → same 4-row height as the letters page)
+    static let sinhalaPages: [[[String]]] = [
+        [["අ", "ආ", "ඇ", "ඈ", "ඉ", "ඊ", "උ", "ඌ", "එ", "ඒ"],
+         ["ඔ", "ඕ", "ඓ", "ඖ", "ඍ", "ඎ", "ං", "ඃ", "ක", "ඛ"],
+         ["ග", "ඝ", "ඞ", "ඟ", "ච", "ඡ", "ජ", "ඣ"]],
+        [["ඤ", "ඥ", "ඦ", "ට", "ඨ", "ඩ", "ඪ", "ණ", "ඬ", "ත"],
+         ["ථ", "ද", "ධ", "න", "ඳ", "ප", "ඵ", "බ", "භ", "ම"],
+         ["ඹ", "ය", "ර", "ල", "ව", "ශ", "ෂ", "ස"]],
+        [["හ", "ළ", "ෆ", "්", "ා", "ැ", "ෑ", "ි", "ී", "ු"],
+         ["ූ", "ෘ", "ෲ", "ෙ", "ේ", "ෛ", "ො", "ෝ", "ෞ", "ෟ"],
+         ["\u{200D}", "ඏ", "ඐ", "෴", ".", ",", "?", "!"]],
     ]
 
     static func sinhalaPage(_ page: KeyPage, showGlobe: Bool) -> [[KeySpec]] {
-        let grid = page == .sinhala1 ? sinhala1 : Array(sinhala2.prefix(3))
-        var rows: [[KeySpec]] = grid.map { row in row.map { KeySpec(kind: .char($0), label: $0) } }
-        let signs = page == .sinhala1 ? ["ා", "ැ", "ෑ", "ි", "ී", "ු", "ූ", "ෙ"] : ["්", "ෘ", "ේ", "ෛ", "ො", "ෝ", "ෞ", "\u{200D}"]
-        let toggle = KeySpec(kind: .page(page == .sinhala1 ? .sinhala2 : .sinhala1), label: page == .sinhala1 ? "1/2" : "2/2", width: 1.3)
-        rows.append([toggle] + signs.map { KeySpec(kind: .char($0), label: $0 == "\u{200D}" ? "ZWJ" : "◌" + $0) } + [KeySpec(kind: .backspace, label: "delete", width: 1.3)])
-        rows.append(bottomRow(singlish: true, page: page, showGlobe: showGlobe))
-        return rows
+        let idx = page == .sinhala1 ? 0 : (page == .sinhala2 ? 1 : 2)
+        let grid = sinhalaPages[idx]
+        func key(_ c: String) -> KeySpec {
+            let isSign = c.unicodeScalars.first.map { (0x0DCA...0x0DDF).contains($0.value) || $0.value == 0x0DF2 || $0.value == 0x0DF3 } ?? false
+            return KeySpec(kind: .char(c), label: c == "\u{200D}" ? "ZWJ" : (isSign ? "◌" + c : c))
+        }
+        let next: KeyPage = idx == 0 ? .sinhala2 : (idx == 1 ? .sinhala3 : .sinhala1)
+        return [
+            grid[0].map(key),
+            grid[1].map(key),
+            [KeySpec(kind: .page(next), label: "\(idx + 1)/3", width: 1.35), KeySpec(kind: .spacer, label: "", width: 0.15)] + grid[2].map(key) + [KeySpec(kind: .spacer, label: "", width: 0.15), KeySpec(kind: .backspace, label: "delete", width: 1.35)],
+            bottomRow(singlish: true, page: page, showGlobe: showGlobe),
+        ]
     }
 }

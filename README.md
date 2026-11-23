@@ -37,6 +37,12 @@ iOS apps build කරන්න පුළුවන් macOS වල විතර�
 > Free Apple ID එකකින් දාපු app එක **දවස් 7කින් expire** වෙනවා. Sideloadly එකේ auto-refresh ON කරන්න, නැත්නම් සතියකට සැරයක් ආයේ දාන්න.
 > Free install එකේ app එකයි keyboard එකයි අතරේ settings share වෙන්නේ නැහැ (App Group ඕන). ඒ නිසා keyboard එකේ **⚙️** එකෙන් settings වෙනස් කරන්න. AI key එක copy කරලා keyboard එකේ **✨ → Paste API key** ඔබන්න.
 
+## Updates (app එක ඇතුළෙන්ම)
+- අලුත් build එකක් ආවම **Swift Akuru app එකේ Setup tab** එකේ "Update එකක් තියෙනවා" card එකක් පේනවා. Keyboard එකේ ⚙️ icon එකත් තැඹිලි පාට ⬇️ එකක් වෙනවා.
+- **SideStore / AltStore** පාවිච්චි කරනවා නම් **SideStore** button එක ඔබන්න, phone එකේම update වෙනවා (PC එකක් ඕන නෑ). More → "Auto-update: SideStore එකට source එක add කරන්න" කළොත් අලුත් version ආවම SideStore එකම කියනවා.
+- **Sideloadly** පාවිච්චි කරනවා නම් `.ipa` button එකෙන් download කරලා PC එකෙන් ආයේ දාන්න. ඉගෙනගත් වචන සහ settings නැති වෙන්නේ නෑ.
+- හැම push එකකටම GitHub Actions එකෙන් build එකක් හැදිලා `SwiftAkuru.ipa`, `update.json`, `altstore.json` Releases වලට වැටෙනවා. Commit message එක තමයි "What's new" විදියට පෙන්නන්නේ.
+
 ## AI key (free)
 1. https://aistudio.google.com/apikey → **Create API key**.
 2. Key එක copy කරන්න → keyboard එකේ ✨ AI → **📋 Paste API key from clipboard**.

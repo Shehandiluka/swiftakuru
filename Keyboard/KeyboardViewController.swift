@@ -24,11 +24,11 @@ final class KeyboardViewController: UIInputViewController {
     private var deleteTimer: Timer?
     private var deleteCount = 0
     private var lastShiftTap = Date.distantPast
-    private var markedInContext = false
     private var lastDocumentId: UUID?
     private lazy var haptic = UIImpactFeedbackGenerator(style: .light)
 
     static let barHeight: CGFloat = 44
+    var pendingUpdate: AppUpdate?
 
     /// Singlish is turned off automatically for e-mail / URL fields
     var singlish: Bool {
@@ -37,7 +37,18 @@ final class KeyboardViewController: UIInputViewController {
         return !(kt == .URL || kt == .emailAddress)
     }
     var live: Bool { store[bool: SharedStore.K.livePreview] }
-    var keyArea: CGFloat { CGFloat(store.keyHeight) * CGFloat(store[bool: SharedStore.K.numberRow] ? 5 : 4) }
+    /// Every page (letters, numbers, අ pages, emoji, AI…) uses exactly this height, so the keyboard never jumps.
+    var keyArea: CGFloat {
+        let screen = UIScreen.main.bounds.size
+        let landscape = screen.width > screen.height
+        let h = CGFloat(store.keyHeight) * (landscape ? 0.76 : 1)
+        return h * CGFloat(store[bool: SharedStore.K.numberRow] ? 5 : 4)
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in self?.applySettings() }
+    }
 
     // MARK: lifecycle
     override func viewDidLoad() {
@@ -80,6 +91,13 @@ final class KeyboardViewController: UIInputViewController {
         if ([.numberPad, .decimalPad, .phonePad, .asciiCapableNumberPad] as [UIKeyboardType]).contains(kt) { page = .numbers; rebuildKeys() }
         updateAutoCap()
         refreshBar()
+        pendingUpdate = UpdateChecker.cached()
+        if hasFullAccess {
+            Task { [weak self] in
+                let u = await UpdateChecker.check()
+                await MainActor.run { guard let self = self else { return }; if u != self.pendingUpdate { self.pendingUpdate = u; self.refreshBar() } }
+            }
+        }
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -116,7 +134,7 @@ final class KeyboardViewController: UIInputViewController {
         switch page {
         case .letters: specs = KeyLayout.letters(singlish: singlish, upper: shift > 0, numberRow: store[bool: SharedStore.K.numberRow], hints: store[bool: SharedStore.K.keyHints], showGlobe: globe)
         case .numbers, .symbols: specs = KeyLayout.numbersPage(symbols: page == .symbols, singlish: singlish, showGlobe: globe)
-        case .sinhala1, .sinhala2: specs = KeyLayout.sinhalaPage(page, showGlobe: globe)
+        case .sinhala1, .sinhala2, .sinhala3: specs = KeyLayout.sinhalaPage(page, showGlobe: globe)
         }
         keys.shiftState = shift
         keys.rowHeight = keyArea / CGFloat(max(1, specs.count))
@@ -236,30 +254,18 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     // MARK: Singlish composition
+    // The Sinhala word being typed is inserted as normal text and replaced in place on every key.
+    // (Marked text behaves differently in each app — in some, the following space landed before the word.)
     func updateComposition() {
         let si = Singlish.convert(composing)
-        if live {
-            textDocumentProxy.setMarkedText(si, selectedRange: NSRange(location: (si as NSString).length, length: 0))
-            if !markedInContext {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self = self else { return }
-                    if (self.textDocumentProxy.documentContextBeforeInput ?? "").hasSuffix(si), !si.isEmpty { self.markedInContext = true }
-                }
-            }
-        }
-        composedShown = si
+        if live { replaceTail(old: composedShown, with: si); composedShown = si }
         refreshBar()
     }
 
     func commitComposition(word: String? = nil) {
         guard !composing.isEmpty else { return }
         let w = word ?? Singlish.convert(composing)
-        if live {
-            textDocumentProxy.setMarkedText(w, selectedRange: NSRange(location: (w as NSString).length, length: 0))
-            textDocumentProxy.unmarkText()
-        } else {
-            textDocumentProxy.insertText(w)
-        }
+        if live { replaceTail(old: composedShown, with: w) } else { textDocumentProxy.insertText(w) }
         WordStore.shared.learn(w, roman: composing, previous: previousWord)
         previousWord = w
         composing = ""
@@ -267,11 +273,54 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func cancelComposition() {
-        if live && !composing.isEmpty {
-            textDocumentProxy.setMarkedText("", selectedRange: NSRange(location: 0, length: 0))
-            textDocumentProxy.unmarkText()
-        }
+        if live && !composedShown.isEmpty { replaceTail(old: composedShown, with: "") }
         composing = ""; composedShown = ""
+    }
+
+    private static func str(_ s: ArraySlice<Unicode.Scalar>) -> String {
+        var v = String.UnicodeScalarView()
+        v.append(contentsOf: s)
+        return String(v)
+    }
+
+    /// Replaces `old` (which is right before the cursor) with `new`, touching only the part that changed.
+    private func replaceTail(old: String, with new: String) {
+        guard old != new else { return }
+        let proxy = textDocumentProxy
+        let oldS = Array(old.unicodeScalars), newS = Array(new.unicodeScalars)
+        var common = 0
+        while common < oldS.count, common < newS.count, oldS[common] == newS[common] { common += 1 }
+        let toRemove = oldS.count - common
+        if toRemove > 0 {
+            let before = Array((proxy.documentContextBeforeInput ?? "").unicodeScalars)
+            if before.count >= oldS.count, Array(before.suffix(oldS.count)) == oldS {
+                // delete until the context is short enough, then put back anything deleted too far
+                let target = before.count - toRemove
+                var current = before.count
+                var steps = 0
+                while current > target, steps < toRemove + 3 {
+                    proxy.deleteBackward(); steps += 1
+                    let now = (proxy.documentContextBeforeInput ?? "").unicodeScalars.count
+                    if now >= current { break } // this app doesn't report changes right away
+                    current = now
+                }
+                if current <= target {
+                    if current < target { proxy.insertText(Self.str(before[current..<target])) }
+                    if common < newS.count { proxy.insertText(Self.str(newS[common...])) }
+                    return
+                }
+                // fallback: remove the rest of the old word (by characters) and type the new word in full
+                let rest = old.count - steps
+                if rest > 0 { for _ in 0..<rest { proxy.deleteBackward() } }
+                proxy.insertText(new)
+                return
+            }
+            // no usable context: replace the whole word
+            for _ in 0..<old.count { proxy.deleteBackward() }
+            proxy.insertText(new)
+            return
+        }
+        if common < newS.count { proxy.insertText(Self.str(newS[common...])) }
     }
 
     // MARK: space / autocorrect / shortcuts
@@ -436,7 +485,7 @@ final class KeyboardViewController: UIInputViewController {
             let emo = Array(bar.lastEmoji.prefix(3))
             if !next.isEmpty || !emo.isEmpty { bar.showSuggestions(next + emo, primary: -1); return }
         }
-        bar.showToolbar(clipboard: hasFullAccess && !ClipboardStore.shared.items.isEmpty)
+        bar.showToolbar(clipboard: hasFullAccess && !ClipboardStore.shared.items.isEmpty, update: pendingUpdate != nil)
     }
 
     private func pickSuggestion(_ s: String) {
@@ -474,7 +523,7 @@ final class KeyboardViewController: UIInputViewController {
         case "clipboard": showPanel(ClipboardPanel(kb: self))
         case "ai": showPanel(AIPanel(kb: self))
         case "settings": showPanel(SettingsPanel(kb: self))
-        case "sinhala": commitComposition(); page = page == .sinhala1 ? .letters : .sinhala1; rebuildKeys()
+        case "sinhala": commitComposition(); page = page.isSinhala ? .letters : .sinhala1; rebuildKeys()
         case "hide": dismissKeyboard()
         default: break
         }
@@ -542,7 +591,7 @@ final class KeyboardViewController: UIInputViewController {
             rebuildKeys()
         }
         // the user moved the cursor / the app changed the text while a word was being composed
-        if !composing.isEmpty, markedInContext {
+        if !composing.isEmpty, live, !composedShown.isEmpty {
             let shown = composedShown
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, !self.composing.isEmpty, self.composedShown == shown else { return }

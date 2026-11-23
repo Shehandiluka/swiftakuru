@@ -463,6 +463,18 @@ final class SettingsPanel: UIView, ThemedPanel {
     }
 
     private func build() {
+        if let u = kb?.pendingUpdate {
+            let l = UILabel()
+            l.numberOfLines = 0
+            l.font = .systemFont(ofSize: 14, weight: .semibold)
+            l.textColor = .systemOrange
+            l.text = "⬇️ Swift Akuru v\(u.version) ready! Swift Akuru app එක open කරලා ‘Update’ ඔබන්න."
+            stack.addArrangedSubview(l)
+            for n in (u.notes ?? []).prefix(4) {
+                let x = UILabel(); x.numberOfLines = 0; x.font = .systemFont(ofSize: 12); x.textColor = theme.specialText; x.text = "• " + n
+                stack.addArrangedSubview(x)
+            }
+        }
         header("THEME")
         let ts = UIScrollView(); ts.showsHorizontalScrollIndicator = false
         let tstack = UIStackView(); tstack.axis = .horizontal; tstack.spacing = 8; tstack.translatesAutoresizingMaskIntoConstraints = false
@@ -493,7 +505,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         header("KEY SIZE")
         let seg = UISegmentedControl(items: ["Small", "Medium", "Large"])
         let h = store.keyHeight
-        seg.selectedSegmentIndex = h < 44 ? 0 : (h > 48 ? 2 : 1)
+        seg.selectedSegmentIndex = h < 50 ? 0 : (h > 56 ? 2 : 1)
         seg.selectedSegmentTintColor = theme.accent
         seg.setTitleTextAttributes([.foregroundColor: theme.keyText], for: .normal)
         seg.addTarget(self, action: #selector(sizeChanged(_:)), for: .valueChanged)
@@ -536,7 +548,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         clip.addTarget(self, action: #selector(clearClip), for: .touchUpInside)
         stack.addArrangedSubview(clip)
         let about = UILabel()
-        about.text = "Swift Akuru 1.0 · SwiftPayPOS (Pvt) Ltd · swiftlk.com"
+        about.text = "Swift Akuru \(UpdateChecker.currentVersion) (\(UpdateChecker.currentBuild)) · SwiftPayPOS (Pvt) Ltd · swiftlk.com"
         about.font = .systemFont(ofSize: 11)
         about.textColor = theme.hint
         about.textAlignment = .center
@@ -550,7 +562,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         applyTheme(KBTheme.named(store.themeId))
     }
     @objc private func sizeChanged(_ s: UISegmentedControl) {
-        store.keyHeight = [40.0, 46.0, 52.0][s.selectedSegmentIndex]
+        store.keyHeight = [47.0, 53.0, 59.0][s.selectedSegmentIndex]
         kb?.applySettings()
     }
     @objc private func aiChanged(_ s: UISegmentedControl) {

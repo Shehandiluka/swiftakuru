@@ -63,7 +63,7 @@ final class KeyboardView: UIView {
     var onKey: ((KeySpec, Event) -> Void)?
     weak var overlay: UIView?
     var theme = KBTheme.named("swift")
-    var rowHeight: CGFloat = 46
+    var rowHeight: CGFloat = 53
     private(set) var rows: [[KeyButton]] = []
     private var bubble: UILabel?
     private var altView: UIStackView?

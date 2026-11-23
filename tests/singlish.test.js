@@ -41,4 +41,5 @@ cases.kaeema = 'කෑම';
 let fail = 0;
 for (const [r, exp] of Object.entries(cases)) { const got = convert(r); const ok = got === exp; if (!ok) fail++; console.log(ok ? 'PASS' : 'FAIL', r.padEnd(14), got, ok ? '' : '(expected ' + exp + ')'); }
 module.exports = { convert };
+if (require.main !== module) return;
 if (fail) { console.log(fail + ' failed'); process.exitCode = 1; }

@@ -24,10 +24,12 @@ struct RootView: View {
 // MARK: - Setup
 struct HomeView: View {
     @State private var test = ""
+    @State private var update: AppUpdate? = UpdateChecker.cached()
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if let u = update { UpdateCard(u: u) }
                     HStack(spacing: 14) {
                         Image("Logo").resizable().frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 16))
                         VStack(alignment: .leading) {
@@ -48,8 +50,33 @@ struct HomeView: View {
                         .lineLimit(3...6).padding(12).background(.thinMaterial).clipShape(RoundedRectangle(cornerRadius: 12))
                     FeatureList()
                 }.padding()
-            }.navigationTitle("").navigationBarHidden(true)
+            }
+            .navigationTitle("").navigationBarHidden(true)
+            .task { update = await UpdateChecker.check(force: true) }
+            .refreshable { update = await UpdateChecker.check(force: true) }
         }
+    }
+}
+
+/// "New version" card – updates are installed with SideStore / AltStore (on the phone) or Sideloadly (PC).
+struct UpdateCard: View {
+    let u: AppUpdate
+    @Environment(\.openURL) private var openURL
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Update එකක් තියෙනවා — v\(u.version) (build \(u.build))", systemImage: "arrow.down.circle.fill").font(.headline).foregroundStyle(.orange)
+            ForEach(Array((u.notes ?? []).prefix(6).enumerated()), id: \.offset) { _, n in Text("• " + n).font(.subheadline) }
+            Text("ඔයා දැන් පාවිච්චි කරන්නේ v\(UpdateChecker.currentVersion) (build \(UpdateChecker.currentBuild))").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button { if let x = UpdateChecker.sideStoreURL(u) { openURL(x) } } label: { Label("SideStore", systemImage: "arrow.down.app") }.buttonStyle(.borderedProminent)
+                Button { if let x = UpdateChecker.altStoreURL(u) { openURL(x) } } label: { Text("AltStore") }.buttonStyle(.bordered)
+                Button { if let x = URL(string: u.ipa) { openURL(x) } } label: { Text(".ipa") }.buttonStyle(.bordered)
+            }
+            Text("SideStore / AltStore තියෙනවා නම් එක tap එකෙන් update වෙනවා. Sideloadly නම් .ipa එක download කරලා PC එකෙන් ආයේ දාන්න — settings, ඉගෙනගත් වචන නැති වෙන්නේ නැහැ.").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.orange.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.5)))
     }
 }
 
@@ -214,6 +241,8 @@ struct MoreView: View {
     @State private var newKey = ""
     @State private var newText = ""
     @State private var words: [(String, Int)] = Array(WordStore.shared.learnedList.prefix(300))
+    @State private var checking = false
+    @State private var checkMsg = ""
     var body: some View {
         NavigationStack {
             List {
@@ -230,8 +259,17 @@ struct MoreView: View {
                     ForEach(words.indices, id: \.self) { k in let w = words[k]; HStack { Text(w.0); Spacer(); Text("\(w.1)").foregroundStyle(.secondary) } }
                         .onDelete { idx in for i in idx { WordStore.shared.forget(words[i].0) }; words.remove(atOffsets: idx) }
                 }
+                Section("Updates") {
+                    HStack { Text("Version"); Spacer(); Text("\(UpdateChecker.currentVersion) (build \(UpdateChecker.currentBuild))").foregroundStyle(.secondary) }
+                    Button(checking ? "Checking…" : "Update තියෙනවද බලන්න") {
+                        checking = true
+                        Task { let u = await UpdateChecker.check(force: true); checkMsg = u.map { "v\($0.version) (build \($0.build)) තියෙනවා — Setup tab එකේ Update ඔබන්න" } ?? "ඔයා ළඟ තියෙන්නේ අලුත්ම version එක ✓"; checking = false }
+                    }.disabled(checking)
+                    if !checkMsg.isEmpty { Text(checkMsg).font(.footnote) }
+                    Button("Auto-update: SideStore එකට Swift Akuru source එක add කරන්න") { if let x = UpdateChecker.sideStoreSourceURL { UIApplication.shared.open(x) } }
+                }
                 Section("About") {
-                    Text("Swift Akuru 1.0 — SwiftPayPOS (Private) Limited")
+                    Text("Swift Akuru \(UpdateChecker.currentVersion) — SwiftPayPOS (Private) Limited")
                     Link("swiftlk.com", destination: URL(string: "https://swiftlk.com")!)
                     Text("Privacy: ඔයා type කරන දේ phone එකේම තියෙනවා. Internet එකට යන්නේ ඔයා AI button එක ඔබපු text එක විතරයි (Google/OpenAI වෙත).").font(.footnote)
                 }

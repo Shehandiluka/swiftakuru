@@ -1,4 +1,7 @@
-# Builds an unsigned SwiftAkuru.ipa on a GitHub cloud Mac. Sign/install it with Sideloadly (Windows) or AltStore.
+# Builds Swift Akuru on a GitHub cloud Mac and publishes it as a GitHub Release with:
+#   SwiftAkuru.ipa   – unsigned; install with SideStore / AltStore (on the phone) or Sideloadly (PC)
+#   update.json      – read by the app & keyboard to show "update available"
+#   altstore.json    – SideStore / AltStore source for one-tap & automatic updates
 name: Build iOS
 on:
   push:
@@ -21,29 +24,51 @@ jobs:
       - name: Build (unsigned)
         run: |
           xcodebuild -project SwiftAkuru.xcodeproj -scheme SwiftAkuru -configuration Release -sdk iphoneos \
-            -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build > xcodebuild.log 2>&1 \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} build > xcodebuild.log 2>&1 \
             || (grep -E "error:" xcodebuild.log | head -40; tail -40 xcodebuild.log; exit 1)
           tail -3 xcodebuild.log
-      - name: Package IPA
+      - name: Package IPA + update feeds
+        env:
+          RUN: ${{ github.run_number }}
+          REPO: ${{ github.repository }}
         run: |
           mkdir -p Payload
           cp -R build/Build/Products/Release-iphoneos/SwiftAkuru.app Payload/
-          zip -qry SwiftAkuru-unsigned.ipa Payload
-          ls -la SwiftAkuru-unsigned.ipa
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SwiftAkuru-unsigned-ipa
-          path: SwiftAkuru-unsigned.ipa
-      - name: Publish release (latest build)
+          zip -qry SwiftAkuru.ipa Payload
+          VER=$(grep -m1 'MARKETING_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')
+          TAG="v$VER-$RUN"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          git log -1 --pretty=%B | grep -vE '^(Co-Authored-By|Claude-Session):' | sed '/^\s*$/d' > notes.txt
+          python3 - "$VER" "$RUN" "$TAG" "$REPO" <<'PY'
+          import json, os, sys, datetime
+          ver, run, tag, repo = sys.argv[1:5]
+          ipa = f"https://github.com/{repo}/releases/download/{tag}/SwiftAkuru.ipa"
+          size = os.path.getsize("SwiftAkuru.ipa")
+          notes = [l.strip().lstrip("-• ").strip() for l in open("notes.txt") if l.strip()]
+          now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+          json.dump({"version": ver, "build": int(run), "date": now, "notes": notes, "ipa": ipa, "size": size}, open("update.json", "w"), ensure_ascii=False, indent=1)
+          icon = f"https://raw.githubusercontent.com/{repo}/main/App/Assets.xcassets/Logo.imageset/logo.png"
+          src = {"name": "Swift Akuru", "identifier": "store.swiftpaypos.swiftakuru.source", "subtitle": "Sinhala keyboard by SwiftPayPOS",
+                 "iconURL": icon, "website": "https://swiftlk.com", "tintColor": "3B6CFF",
+                 "apps": [{"name": "Swift Akuru", "bundleIdentifier": "store.swiftpaypos.swiftakuru", "developerName": "SwiftPayPOS (Private) Limited",
+                           "subtitle": "Singlish → සිංහල keyboard with AI", "localizedDescription": "Sinhala (Singlish) keyboard with smart suggestions, AI translate, grammar fix, clipboard history, emoji and themes.",
+                           "iconURL": icon, "tintColor": "3B6CFF", "category": "utilities",
+                           "versions": [{"version": ver, "buildVersion": run, "date": now, "localizedDescription": "\n".join(notes), "downloadURL": ipa, "size": size, "minOSVersion": "16.0"}],
+                           "appPermissions": {"entitlements": [], "privacy": {}}}],
+                 "news": []}
+          json.dump(src, open("altstore.json", "w"), ensure_ascii=False, indent=1)
+          print(open("update.json").read())
+          PY
+          cp SwiftAkuru.ipa SwiftAkuru-unsigned.ipa
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="build-${{ github.run_number }}"
-          gh release create "$TAG" SwiftAkuru-unsigned.ipa --title "Swift Akuru build ${{ github.run_number }}" \
-            --notes "Unsigned IPA – install with Sideloadly (see README)." --latest
-      - name: Upload build log on failure
+          gh release create "$TAG" SwiftAkuru.ipa SwiftAkuru-unsigned.ipa update.json altstore.json \
+            --title "Swift Akuru $TAG" --notes-file notes.txt --latest
+      - uses: actions/upload-artifact@v4
         if: failure()
-        uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
           path: xcodebuild.log
