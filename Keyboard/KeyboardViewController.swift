@@ -36,6 +36,9 @@ final class KeyboardViewController: UIInputViewController {
     var input: UITextDocumentProxy { draft ?? textDocumentProxy }
     private var composeStrip: SecretComposeStrip?
     private var draftConversation: String?
+    /// Translate & Reply: the reply typed in the strip is translated into this language before it goes into the chat.
+    private var translateTarget: Translator.Language?
+    private var translateContext = ""
     private var unlockedSecret: (id: String, at: Date)?
     private var barTopC: NSLayoutConstraint!
     static let composeHeight: CGFloat = 44
@@ -224,7 +227,7 @@ final class KeyboardViewController: UIInputViewController {
             // like the iPhone keyboard: after a number or symbol, space goes back to the letters
             if page == .numbers || page == .symbols { page = .letters; rebuildKeys(); updateAutoCap() }
         case .ret:
-            if draft != nil { sendSecretDraft(); return }
+            if draft != nil { if translateTarget != nil { sendTranslateDraft() } else { sendSecretDraft() }; return }
             commitComposition()
             input.insertText("\n")
             previousWord = nil
@@ -563,6 +566,7 @@ final class KeyboardViewController: UIInputViewController {
         case "emoji": showPanel(EmojiPanel(kb: self))
         case "clipboard": showPanel(ClipboardPanel(kb: self))
         case "ai": showPanel(AIPanel(kb: self))
+        case "translate": showPanel(TranslatePanel(kb: self))
         case "settings": showPanel(SettingsPanel(kb: self))
         case "sinhala": commitComposition(); page = page.isSinhala ? .letters : .sinhala1; rebuildKeys()
         case "secret": openSecretChat()
@@ -591,6 +595,7 @@ final class KeyboardViewController: UIInputViewController {
         case is EmojiPanel: return "Emoji"
         case is ClipboardPanel: return "Clipboard"
         case is AIPanel: return "✨ Swift AI"
+        case is TranslatePanel: return "🌐 Translate & Reply"
         case is SettingsPanel: return "Settings"
         case is SecretChatPanel: return "🔒 Secret Chat"
         default: return ""
@@ -699,8 +704,67 @@ final class KeyboardViewController: UIInputViewController {
         }
     }
 
+    // MARK: Translate & Reply
+    func beginTranslateReply(to lang: Translator.Language, context: String) {
+        commitComposition()
+        panel?.removeFromSuperview(); panel = nil
+        panelHost.isHidden = true; keys.isHidden = false
+        let d = ChatDraftProxy()
+        d.returnKeyType = .send
+        draft = d
+        draftConversation = nil
+        translateTarget = lang
+        translateContext = context
+        let placeholder = "🌐 \(lang.native) reply — සිංහල / Singlish / English type කරන්න…"
+        let strip = SecretComposeStrip(theme: theme, partner: lang.native)
+        strip.show("", placeholder: placeholder)
+        d.onChange = { [weak strip] t in strip?.show(t, placeholder: placeholder) }
+        strip.onSend = { [weak self] in self?.sendTranslateDraft() }
+        strip.onCancel = { [weak self] in self?.endSecretCompose(reopen: false) }
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(strip)
+        NSLayoutConstraint.activate([strip.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+                                     strip.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 6),
+                                     strip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
+                                     strip.heightAnchor.constraint(equalToConstant: Self.composeHeight - 6)])
+        composeStrip = strip
+        barTopC.constant = Self.composeHeight
+        page = .letters; shift = 0
+        ensureHeight(); rebuildKeys(); updateAutoCap(); refreshBar()
+    }
+
+    private var translating = false
+    private func sendTranslateDraft() {
+        guard let d = draft, let lang = translateTarget, !translating else { return }
+        commitComposition()
+        let text = d.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        translating = true
+        composeStrip?.show("⏳ \(lang.native) වලට translate කරනවා…", placeholder: "")
+        let context = translateContext
+        Task { @MainActor [weak self] in
+            do {
+                let out = try await Translator.reply(text, to: lang, context: context)
+                guard let self = self else { return }
+                self.translating = false
+                self.endSecretCompose(reopen: false)
+                self.textDocumentProxy.insertText(out)
+                self.bar.showSuggestions(["✓ \(lang.native) වලින් දැම්මා — Send ඔබන්න"], primary: 0)
+            } catch {
+                guard let self = self else { return }
+                self.translating = false
+                self.composeStrip?.show("⚠️ " + error.localizedDescription, placeholder: "")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+                    guard let self = self, let d = self.draft else { return }
+                    self.composeStrip?.show(d.text, placeholder: "")
+                }
+            }
+        }
+    }
+
     /// Leaves compose mode. The draft is discarded (never inserted into the host app).
     func endSecretCompose(reopen: Bool) {
+        translateTarget = nil; translateContext = ""
         composing = ""; composedShown = ""
         draft?.clear()
         draft = nil

@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.3.6"
+    MARKETING_VERSION: "1.4.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""            # put your Apple Team ID here when you have a paid account
     CODE_SIGN_STYLE: Automatic
@@ -19,8 +19,11 @@ targets:
     sources:
       - path: App
       - path: Shared
+      - path: TranslateUI
     dependencies:
       - target: SwiftAkuruKeyboard
+        embed: true
+      - target: SwiftAkuruShare
         embed: true
     entitlements:
       path: App/SwiftAkuru.entitlements
@@ -70,6 +73,36 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru.keyboard
+        APPLICATION_EXTENSION_API_ONLY: YES
+  SwiftAkuruShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Share
+      - path: Shared
+      - path: TranslateUI
+    entitlements:
+      path: Share/SwiftAkuruShare.entitlements
+      properties:
+        com.apple.security.application-groups: [group.store.swiftpaypos.swiftakuru]
+    info:
+      path: Share/Info.plist
+      properties:
+        CFBundleDisplayName: Swift Akuru
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsFileWithMaxCount: 1
+              NSExtensionActivationSupportsAttachmentsWithMaxCount: 1
+              NSExtensionActivationSupportsMovieWithMaxCount: 1
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru.share
         APPLICATION_EXTENSION_API_ONLY: YES
   SwiftAkuruTests:
     type: bundle.unit-test

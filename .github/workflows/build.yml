@@ -46,6 +46,7 @@ jobs:
           # App Group when they re-sign (app ↔ keyboard settings sharing).
           APP=Payload/SwiftAkuru.app
           codesign -f -s - --entitlements Keyboard/SwiftAkuruKeyboard.entitlements "$APP/PlugIns/SwiftAkuruKeyboard.appex"
+          codesign -f -s - --entitlements Share/SwiftAkuruShare.entitlements "$APP/PlugIns/SwiftAkuruShare.appex"
           codesign -f -s - --entitlements App/SwiftAkuru.entitlements "$APP"
           codesign -d --entitlements - "$APP/PlugIns/SwiftAkuruKeyboard.appex" 2>/dev/null | grep -q application-groups
           codesign -d --entitlements - "$APP" 2>/dev/null | grep -q application-groups

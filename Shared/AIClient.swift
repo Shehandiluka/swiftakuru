@@ -51,7 +51,18 @@ enum AIClient {
     }
 
     static func complete(_ prompt: String) async throws -> String {
+        try await complete(prompt, json: false, audio: nil)
+    }
+
+    /// - json: ask the model for a JSON object only
+    /// - audio: a voice message (Gemini reads it directly; OpenAI transcribes it first)
+    static func complete(_ prompt: String, json wantJSON: Bool, audio: (data: Data, mime: String)?) async throws -> String {
         let st = SharedStore.shared
+        var prompt = prompt
+        if let a = audio, st[string: SharedStore.K.aiProvider] == "openai" {
+            let heard = try await transcribeOpenAI(a.data, mime: a.mime)
+            prompt += "\n\nVOICE MESSAGE TRANSCRIPT (from speech recognition):\n" + heard
+        }
         let key = st.aiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw AIError.noKey }
         var req: URLRequest
@@ -59,18 +70,24 @@ enum AIClient {
         if openai {
             req = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
             req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            let body: [String: Any] = ["model": st[string: SharedStore.K.aiModelOpenAI], "messages": [["role": "user", "content": prompt]], "temperature": 0.4]
+            var body: [String: Any] = ["model": st[string: SharedStore.K.aiModelOpenAI], "messages": [["role": "user", "content": prompt]], "temperature": 0.3]
+            if wantJSON { body["response_format"] = ["type": "json_object"] }
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         } else {
             let model = st[string: SharedStore.K.aiModelGemini].isEmpty ? "gemini-2.5-flash" : st[string: SharedStore.K.aiModelGemini]
             req = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!)
             req.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-            let body: [String: Any] = ["contents": [["role": "user", "parts": [["text": prompt]]]], "generationConfig": ["temperature": 0.4]]
+            var parts: [[String: Any]] = []
+            if let a = audio { parts.append(["inline_data": ["mime_type": a.mime, "data": a.data.base64EncodedString()]]) }
+            parts.append(["text": prompt])
+            var gen: [String: Any] = ["temperature": 0.3]
+            if wantJSON { gen["responseMimeType"] = "application/json" }
+            let body: [String: Any] = ["contents": [["role": "user", "parts": parts]], "generationConfig": gen]
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.timeoutInterval = 30
+        req.timeoutInterval = audio == nil ? 30 : 90
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
@@ -86,6 +103,36 @@ enum AIClient {
             text = parts.compactMap { $0["text"] as? String }.joined()
         }
         guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { throw AIError.empty }
+        return t
+    }
+
+    /// OpenAI speech-to-text for voice messages.
+    static func transcribeOpenAI(_ data: Data, mime: String) async throws -> String {
+        let key = SharedStore.shared.aiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw AIError.noKey }
+        let ext = Translator.fileExtension(forMime: mime)
+        let boundary = "SA-\(UUID().uuidString)"
+        var body = Data()
+        func field(_ name: String, _ value: String) {
+            body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8))
+        }
+        field("model", "gpt-4o-mini-transcribe")
+        body.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.\(ext)\"\r\nContent-Type: \(mime)\r\n\r\n".utf8))
+        body.append(data)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        var req = URLRequest(url: URL(string: "https://api.openai.com/v1/audio/transcriptions")!)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 90
+        let (out, resp) = try await URLSession.shared.upload(for: req, from: body)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let json = (try? JSONSerialization.jsonObject(with: out)) as? [String: Any] ?? [:]
+        guard code == 200 else {
+            let msg = ((json["error"] as? [String: Any])?["message"] as? String) ?? ""
+            throw AIError.http(code, String(msg.prefix(160)))
+        }
+        guard let t = (json["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { throw AIError.empty }
         return t
     }
 }

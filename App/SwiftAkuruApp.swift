@@ -48,6 +48,19 @@ struct HomeView: View {
                             Text("සිංහල + English keyboard · AI සමඟ").foregroundStyle(.secondary)
                         }
                     }
+                    NavigationLink {
+                        TranslateView(input: .none).navigationTitle("🌐 Translate & Reply")
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "character.bubble.fill").font(.title2)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Translate & Reply").font(.headline)
+                                Text("ඕනම භාෂාවක message / voice → සිංහල, reply එක → ඒ භාෂාවට").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                        }.padding(14).background(swiftPurple.opacity(0.18)).clipShape(RoundedRectangle(cornerRadius: 14))
+                    }.buttonStyle(.plain)
                     StepCard(n: 1, title: "Keyboard එක ON කරන්න", text: "පහළ button එක ඔබලා Settings → Keyboards → Swift Akuru ON කරන්න.")
                     StepCard(n: 2, title: "Allow Full Access ON කරන්න", text: "Clipboard, AI, sound/vibration වලට මේක ඕන. ඔයා type කරන දේවල් අපි save කරන්නේවත් යවන්නේවත් නැහැ (AI එකට යවන්නේ ඔයා ✨ ඔබපු text එක විතරයි).")
                     Button {

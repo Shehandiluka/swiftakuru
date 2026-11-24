@@ -78,6 +78,7 @@ final class SuggestionBar: UIView {
         stack.distribution = .fillEqually
         let tools: [(String, String?, String)] = [
             ("emoji", "face.smiling", ""), ("clipboard", clipboard ? "doc.on.clipboard.fill" : "doc.on.clipboard", ""), ("ai", "sparkles", ""),
+            ("translate", "character.bubble", ""),
             ("sinhala", nil, "අ"), ("settings", update ? "arrow.down.circle.fill" : "gearshape", ""), ("hide", "keyboard.chevron.compact.down", ""),
         ].flatMap { t -> [(String, String?, String)] in t.0 == "settings" && secret ? [("secret", "lock", ""), t] : [t] }
         for (id, sym, text) in tools {
@@ -85,7 +86,7 @@ final class SuggestionBar: UIView {
             if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)), for: .normal) } else {
                 b.setTitle(text, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
             }
-            b.tintColor = (id == "settings" && update) ? UIColor.systemOrange : (id == "ai" ? theme.accent : theme.specialText)
+            b.tintColor = (id == "settings" && update) ? UIColor.systemOrange : ((id == "ai" || (id == "translate" && ClipboardStore.shared.pending)) ? theme.accent : theme.specialText)
             b.setTitleColor(theme.specialText, for: .normal)
             b.accessibilityIdentifier = id
             b.accessibilityLabel = id

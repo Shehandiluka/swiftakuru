@@ -1,7 +1,7 @@
 import UIKit
 
 // MARK: - helpers
-private func pill(_ title: String, theme t: KBTheme, filled: Bool = false, size: CGFloat = 14) -> UIButton {
+func pill(_ title: String, theme t: KBTheme, filled: Bool = false, size: CGFloat = 14) -> UIButton {
     let b = UIButton(type: .system)
     b.setTitle(title, for: .normal)
     b.titleLabel?.font = .systemFont(ofSize: size, weight: .semibold)
@@ -12,7 +12,7 @@ private func pill(_ title: String, theme t: KBTheme, filled: Bool = false, size:
     return b
 }
 
-private func infoLabel(_ text: String, theme t: KBTheme) -> UILabel {
+func infoLabel(_ text: String, theme t: KBTheme) -> UILabel {
     let l = UILabel()
     l.text = text
     l.numberOfLines = 0
@@ -22,7 +22,7 @@ private func infoLabel(_ text: String, theme t: KBTheme) -> UILabel {
     return l
 }
 
-private func fullAccessMessage(_ t: KBTheme) -> UILabel {
+func fullAccessMessage(_ t: KBTheme) -> UILabel {
     infoLabel("මේ feature එකට \"Allow Full Access\" ඕන.\nSettings → General → Keyboard → Keyboards → Swift Akuru → Allow Full Access ON කරන්න.\n(ඔයා type කරන දේවල් අපි කොහෙවත් යවන්නේ නැහැ — AI එකට යවන්නේ ඔයා AI button එක ඔබපු text එක විතරයි.)", theme: t)
 }
 
