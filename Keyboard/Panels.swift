@@ -262,7 +262,7 @@ final class AIPanel: UIView, ThemedPanel {
 
     @objc private func pasteKey() {
         guard let k = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines), k.count > 20, !k.contains(" ") else {
-            kb?.bar.showSuggestions(["Clipboard එකේ API key එකක් නැහැ"], primary: -1); return
+            kb?.flash("Clipboard එකේ API key එකක් නැහැ"); return
         }
         let st = SharedStore.shared
         let isOpenAI = k.hasPrefix("sk-")
@@ -416,7 +416,7 @@ final class AIPanel: UIView, ThemedPanel {
         kb.closePanel()
     }
     @objc private func doInsert() { guard !output.isEmpty else { return }; kb?.insertFromPanel(" " + output); kb?.closePanel() }
-    @objc private func doCopy() { guard !output.isEmpty else { return }; UIPasteboard.general.string = output; kb?.bar.showSuggestions(["✓ Copied"], primary: 0) }
+    @objc private func doCopy() { guard !output.isEmpty else { return }; UIPasteboard.general.string = output; kb?.flash("✓ Copied") }
 }
 
 // MARK: - Settings (inside the keyboard, so it works even without the app)

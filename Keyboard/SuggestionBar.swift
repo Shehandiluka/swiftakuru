@@ -36,6 +36,7 @@ final class SuggestionBar: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func clear() {
+        statusText = nil
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         scroll.contentOffset = .zero
     }
@@ -120,4 +121,22 @@ final class SuggestionBar: UIView {
         stack.addArrangedSubview(b); stack.addArrangedSubview(l); stack.addArrangedSubview(spacer)
     }
     @objc private func tapBack() { backAction?() }
+
+    /// A short message that can't be tapped or picked (never typed into the chat).
+    private(set) var statusText: String?
+    func showStatus(_ text: String) {
+        clear()
+        items = []
+        statusText = text
+        stack.distribution = .fill
+        let l = UILabel()
+        l.text = text
+        l.textColor = theme.specialText
+        l.font = .systemFont(ofSize: 15, weight: .semibold)
+        l.textAlignment = .center
+        l.adjustsFontSizeToFitWidth = true
+        l.minimumScaleFactor = 0.7
+        l.isUserInteractionEnabled = false
+        stack.addArrangedSubview(l)
+    }
 }

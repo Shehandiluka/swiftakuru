@@ -611,6 +611,15 @@ final class KeyboardViewController: UIInputViewController {
         refreshBar()
     }
 
+    /// Shows a short status in the bar, then puts back what was there (suggestions or the panel title).
+    func flash(_ text: String) {
+        bar.showStatus(text)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
+            guard let self = self, self.bar.statusText == text else { return }
+            if let p = self.panel { self.bar.showTitle(self.panelTitle(p)) { [weak self] in self?.closePanel() } } else { self.refreshBar() }
+        }
+    }
+
     func insertFromPanel(_ s: String) {
         commitComposition()
         input.insertText(s)
@@ -749,7 +758,7 @@ final class KeyboardViewController: UIInputViewController {
                 self.translating = false
                 self.endSecretCompose(reopen: false)
                 self.textDocumentProxy.insertText(out)
-                self.bar.showSuggestions(["✓ \(lang.native) වලින් දැම්මා — Send ඔබන්න"], primary: 0)
+                self.flash("✓ \(lang.native) වලින් දැම්මා — Send ඔබන්න")
             } catch {
                 guard let self = self else { return }
                 self.translating = false

@@ -1,5 +1,6 @@
 import UIKit
 import AVFoundation
+import UniformTypeIdentifiers
 
 /// 🌐 Translate & Reply.
 /// Copy (or select) a message from any chat → it is translated into your language → tap "Reply",
@@ -12,6 +13,17 @@ final class TranslatePanel: UIView, ThemedPanel {
     private let langButton = UIButton(type: .system)
     private let result = UITextView()
     private let spinner = UIActivityIndicatorView(style: .medium)
+    /// Apple's own Paste button: reading the clipboard through it never shows the "Allow Paste?" question.
+    private lazy var pasteButton: UIPasteControl = {
+        let c = UIPasteControl.Configuration()
+        c.displayMode = .iconAndLabel
+        c.cornerStyle = .capsule
+        c.baseBackgroundColor = theme.accent
+        c.baseForegroundColor = .white
+        let b = UIPasteControl(configuration: c)
+        b.target = self
+        return b
+    }()
     private let buttons = UIStackView()
     private let picker = UIScrollView()
     private let pickerStack = UIStackView()
@@ -85,7 +97,9 @@ final class TranslatePanel: UIView, ThemedPanel {
         pickerStack.translatesAutoresizingMaskIntoConstraints = false
         picker.addSubview(pickerStack)
 
-        for v in [source, langButton, result, spinner, buttons, picker] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
+        pasteConfiguration = UIPasteConfiguration(acceptableTypeIdentifiers: [UTType.plainText.identifier, UTType.utf8PlainText.identifier, UTType.text.identifier])
+        pasteButton.isHidden = true
+        for v in [source, langButton, result, spinner, pasteButton, buttons, picker] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; addSubview(v) }
         NSLayoutConstraint.activate([
             source.topAnchor.constraint(equalTo: topAnchor, constant: 2), source.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8), source.heightAnchor.constraint(equalToConstant: 28),
             langButton.leadingAnchor.constraint(equalTo: source.trailingAnchor, constant: 6), langButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -93,6 +107,8 @@ final class TranslatePanel: UIView, ThemedPanel {
             result.topAnchor.constraint(equalTo: source.bottomAnchor, constant: 6), result.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8), result.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             result.bottomAnchor.constraint(equalTo: buttons.topAnchor, constant: -6),
             spinner.centerXAnchor.constraint(equalTo: result.centerXAnchor), spinner.centerYAnchor.constraint(equalTo: result.centerYAnchor),
+            pasteButton.centerXAnchor.constraint(equalTo: result.centerXAnchor), pasteButton.bottomAnchor.constraint(equalTo: result.bottomAnchor, constant: -10),
+            pasteButton.heightAnchor.constraint(equalToConstant: 40), pasteButton.widthAnchor.constraint(equalToConstant: 150),
             buttons.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8), buttons.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             buttons.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4), buttons.heightAnchor.constraint(equalToConstant: 34),
             picker.topAnchor.constraint(equalTo: topAnchor), picker.bottomAnchor.constraint(equalTo: bottomAnchor), picker.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4), picker.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
@@ -106,15 +122,42 @@ final class TranslatePanel: UIView, ThemedPanel {
 
     func applyTheme(_ t: KBTheme) { theme = t }
 
+    override func paste(itemProviders: [NSItemProvider]) {
+        guard let p = itemProviders.first(where: { $0.canLoadObject(ofClass: NSString.self) }) else { return }
+        _ = p.loadObject(ofClass: NSString.self) { [weak self] obj, _ in
+            guard let s = (obj as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return }
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                self.pasteButton.isHidden = true
+                ClipboardStore.shared.add(s)
+                self.sourceText = s
+                self.run()
+            }
+        }
+    }
+
     private func updateLangButton() { langButton.setTitle("→ \(Translator.myLanguage.native) ▾", for: .normal) }
 
     // MARK: source & translate
     @objc private func sourceChanged() {
         guard let kb = kb else { return }
+        pasteButton.isHidden = true
         switch source.selectedSegmentIndex {
         case 0:
-            ClipboardStore.shared.capture(userInitiated: true)
-            sourceText = UIPasteboard.general.string ?? ""
+            // Reading the clipboard ourselves makes iOS ask "Allow Paste?" every time, unless the user turned on
+            // Settings → Swift Akuru → Paste from Other Apps → Allow (then "auto save" is ON in our settings).
+            if SharedStore.shared[bool: SharedStore.K.clipAuto] {
+                sourceText = UIPasteboard.general.string ?? ""
+            } else {
+                last = nil
+                guard UIPasteboard.general.hasStrings else {
+                    show(note: "Chat එකේ message එක long-press → Copy කරලා මෙතනට එන්න. (Voice message: long-press → Share → Swift Akuru)")
+                    return
+                }
+                show(note: "Copy කරපු message එක translate කරන්න පහළ Paste ඔබන්න 👇")
+                pasteButton.isHidden = false
+                return
+            }
         case 1: sourceText = kb.textDocumentProxy.selectedText ?? ""
         default: sourceText = kb.textDocumentProxy.documentContextBeforeInput ?? ""
         }
@@ -182,7 +225,7 @@ final class TranslatePanel: UIView, ThemedPanel {
     @objc private func copyOut() {
         guard let r = last else { return }
         UIPasteboard.general.string = r.translation
-        kb?.bar.showSuggestions(["✓ Copied"], primary: 0)
+        kb?.flash("✓ Copied")
     }
     @objc private func insertOut() {
         guard let r = last else { return }
