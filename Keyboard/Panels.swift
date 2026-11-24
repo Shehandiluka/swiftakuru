@@ -135,7 +135,6 @@ final class ClipboardPanel: UIView, ThemedPanel, UITableViewDataSource, UITableV
         theme = kb.theme
         super.init(frame: .zero)
         guard kb.hasFullAccess else { addCentered(fullAccessMessage(theme)); return }
-        ClipboardStore.shared.capture()
         items = ClipboardStore.shared.sorted
         table.backgroundColor = .clear
         table.separatorColor = theme.special
@@ -158,7 +157,15 @@ final class ClipboardPanel: UIView, ThemedPanel, UITableViewDataSource, UITableV
             table.topAnchor.constraint(equalTo: clear.bottomAnchor, constant: 2), table.leadingAnchor.constraint(equalTo: leadingAnchor),
             table.trailingAnchor.constraint(equalTo: trailingAnchor), table.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        if items.isEmpty { addCentered(infoLabel("Copy කරපු දේවල් මෙතන save වෙනවා.\nමොනවා හරි copy කරලා බලන්න.", theme: theme)) }
+        let empty = infoLabel("Copy කරපු දේවල් මෙතන save වෙනවා.\nමොනවා හරි copy කරලා බලන්න.", theme: theme)
+        if items.isEmpty { addCentered(empty) }
+        // the user opened the clipboard, so read the new copy now — after the panel is on screen
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, ClipboardStore.shared.capture(userInitiated: true) else { return }
+            self.items = ClipboardStore.shared.sorted
+            empty.removeFromSuperview()
+            self.table.reloadData()
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -520,6 +527,14 @@ final class SettingsPanel: UIView, ThemedPanel {
         toggle("Space දෙපාරක් = full stop", SharedStore.K.doubleSpace)
         toggle("Emoji suggestions", SharedStore.K.emojiSuggest)
         toggle("මම type කරන වචන ඉගෙනගන්න", SharedStore.K.learnWords)
+        header("CLIPBOARD")
+        toggle("Copy කරන දේ auto save කරන්න", SharedStore.K.clipAuto)
+        let clipNote = UILabel()
+        clipNote.numberOfLines = 0
+        clipNote.font = .systemFont(ofSize: 12)
+        clipNote.textColor = theme.specialText
+        clipNote.text = "\"Allow Paste\" ආයේ අහන්නේ නැති වෙන්න: iPhone Settings → Swift Akuru → Paste from Other Apps → Allow. ඊට පස්සේ මේක ON කරන්න."
+        stack.addArrangedSubview(clipNote)
         header("FEEDBACK (Full Access ඕන)")
         toggle("Key sound", SharedStore.K.sound)
         toggle("Vibration (haptics)", SharedStore.K.haptics)

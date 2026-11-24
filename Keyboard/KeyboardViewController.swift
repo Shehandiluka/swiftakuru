@@ -113,13 +113,17 @@ final class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         ensureHeight()
         applySettings()
-        if hasFullAccess { ClipboardStore.shared.capture() }
         let kt = textDocumentProxy.keyboardType ?? .default
         if ([.numberPad, .decimalPad, .phonePad, .asciiCapableNumberPad] as [UIKeyboardType]).contains(kt) { page = .numbers; rebuildKeys() }
         updateAutoCap()
         refreshBar()
         pendingUpdate = UpdateChecker.cached()
         if hasFullAccess {
+            // after the keys are drawn, so a clipboard alert can never leave the keyboard half-built
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                guard let self = self else { return }
+                if ClipboardStore.shared.capture(), self.composing.isEmpty { self.refreshBar() }
+            }
             Task { [weak self] in
                 let u = await UpdateChecker.check()
                 await MainActor.run { guard let self = self else { return }; if u != self.pendingUpdate { self.pendingUpdate = u; self.refreshBar() } }
@@ -514,7 +518,7 @@ final class KeyboardViewController: UIInputViewController {
             let emo = Array(bar.lastEmoji.prefix(3))
             if !next.isEmpty || !emo.isEmpty { bar.showSuggestions(next + emo, primary: -1); return }
         }
-        bar.showToolbar(clipboard: hasFullAccess && !ClipboardStore.shared.items.isEmpty, update: pendingUpdate != nil,
+        bar.showToolbar(clipboard: hasFullAccess && (!ClipboardStore.shared.items.isEmpty || ClipboardStore.shared.pending), update: pendingUpdate != nil,
                         secret: hasFullAccess && ChatService.shared.isSignedIn && draft == nil)
     }
 

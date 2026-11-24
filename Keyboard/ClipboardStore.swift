@@ -13,13 +13,27 @@ final class ClipboardStore {
         if let d = try? Data(contentsOf: url), let v = try? JSONDecoder().decode([Item].self, from: d) { items = v }
     }
 
-    /// Reads the system clipboard only when it changed (changeCount does not trigger the paste banner).
+    /// true when something new was copied that we have not read yet (no "Allow Paste" banner involved).
+    private(set) var pending = false
+
+    /// Checks the clipboard without triggering iOS's "Allow Paste" alert.
+    /// changeCount and hasStrings never show the alert; reading .string does.
+    /// The text is read only when the user asks for it (userInitiated) or when they turned on
+    /// automatic saving after choosing Settings → Swift Akuru → Paste from Other Apps → Allow.
     @discardableResult
-    func capture() -> Bool {
+    func capture(userInitiated: Bool = false) -> Bool {
         let pb = UIPasteboard.general
-        guard pb.changeCount != lastChange else { return false }
+        let changed = pb.changeCount != lastChange
+        guard changed || (userInitiated && pending) else { return false }
+        let auto = SharedStore.shared[bool: SharedStore.K.clipAuto]
+        guard userInitiated || auto else {
+            let was = pending
+            pending = pb.hasStrings
+            return pending != was
+        }
         lastChange = pb.changeCount
         SharedStore.shared.defaults.set(lastChange, forKey: "clipLastChange")
+        pending = false
         guard pb.hasStrings, let s = pb.string?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty, s.count < 20000 else { return false }
         add(s)
         return true
