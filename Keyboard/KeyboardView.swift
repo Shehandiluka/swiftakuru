@@ -158,7 +158,7 @@ final class KeyboardView: UIView {
     @objc private func down(_ b: KeyButton) {
         b.apply(theme: theme, highlighted: true, active: b.spec.kind == .shift && shiftState > 0)
         b.animatePress(true)
-        if case .char = b.spec.kind { showBubble(b) }
+        // no letter pop-up preview — the key itself darkens and shrinks a little instead
         onKey?(b.spec, .down)
     }
     @objc private func up(_ b: KeyButton) {

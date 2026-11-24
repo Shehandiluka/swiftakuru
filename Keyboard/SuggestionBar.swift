@@ -40,7 +40,13 @@ final class SuggestionBar: UIView {
         scroll.contentOffset = .zero
     }
 
-    func showSuggestions(_ list: [String], primary: Int) {
+    func showSuggestions(_ all: [String], primary: Int) {
+        // at most 3 suggestions; the highlighted one is always kept
+        var list = Array(all.prefix(3)), primary = primary
+        if primary >= 3, all.indices.contains(primary) {
+            list = [all[primary]] + all.enumerated().filter { $0.offset != primary }.map { $0.element }.prefix(2)
+            primary = 0
+        }
         clear()
         items = list
         stack.distribution = .fillEqually
@@ -54,7 +60,7 @@ final class SuggestionBar: UIView {
             b.layer.cornerRadius = 8
             b.tag = i
             b.addTarget(self, action: #selector(tapItem(_:)), for: .touchUpInside)
-            let minW = b.widthAnchor.constraint(greaterThanOrEqualToConstant: list.count > 3 ? 78 : 60)
+            let minW = b.widthAnchor.constraint(greaterThanOrEqualToConstant: 60)
             minW.priority = UILayoutPriority(999)
             minW.isActive = true
             stack.addArrangedSubview(b)
