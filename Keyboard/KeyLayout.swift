@@ -47,7 +47,7 @@ enum KeyLayout {
 
     static let singlishAlts: [String: [(String, String)]] = [
         "a": [("ආ", "aa"), ("ඇ", "ae"), ("ඈ", "aee"), ("ඓ", "ai"), ("ඖ", "au")],
-        "e": [("ඒ", "E"), ("ඊ", "ee"), ("ඓ", "ai")],
+        "e": [("ඒ", "ee"), ("ඊ", "ii"), ("ඓ", "ai")],
         "i": [("ඊ", "ii")],
         "o": [("ඕ", "O"), ("ඖ", "au")],
         "u": [("ඌ", "uu"), ("ඍ", "Ru")],

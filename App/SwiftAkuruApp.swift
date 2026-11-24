@@ -118,8 +118,8 @@ struct GuideView: View {
     ]
     let letters: [(String, String)] = [
         ("t / th", "ට / ත"), ("d / dh", "ඩ / ද"), ("T / Th", "ඨ / ථ"), ("D / Dh", "ඪ / ධ"), ("n / N", "න / ණ"), ("l / L", "ල / ළ"), ("s / sh / Sh", "ස / ශ / ෂ"),
-        ("x", "ං"), ("zg / zd / zdh / zb", "ඟ / ඬ / ඳ / ඹ"), ("kn / gn", "ඤ / ඥ"), ("a / aa", "අ / ආ"), ("ae / aee", "ඇ / ඈ"), ("i / ii", "ඉ / ඊ"),
-        ("u / uu", "උ / ඌ"), ("e / E", "එ / ඒ"), ("o / O", "ඔ / ඕ"), ("ai / au", "ඓ / ඖ"), ("Ru", "ඍ (කෘ)"), ("kr+vowel / ky+vowel", "ක්‍ර / ක්‍ය"),
+        ("x", "ං"), ("zg / zd / zdh / zb", "ඟ / ඬ / ඳ / ඹ"), ("kn / gn", "ඤ / ඥ"), ("a / aa", "අ / ආ"), ("ae / aee", "ඇ / ඈ"), ("i / ii", "ඉ / ඊ (කී = kii)"),
+        ("u / uu", "උ / ඌ"), ("e / ee", "එ / ඒ (කේ = kee)"), ("o / O", "ඔ / ඕ"), ("ai / au", "ඓ / ඖ"), ("Ru", "ඍ (කෘ)"), ("kr+vowel / ky+vowel", "ක්‍ර / ක්‍ය"),
     ]
     var body: some View {
         NavigationStack {

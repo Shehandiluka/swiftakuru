@@ -2,7 +2,7 @@ import Foundation
 
 /// Helakuru-style Singlish → Sinhala Unicode transliteration.
 ///  t=ට th=ත d=ඩ dh=ද  T=ඨ Th=ථ D=ඪ Dh=ධ  N=ණ L=ළ  x=ං  zg=ඟ zd=ඬ zdh=ඳ zb=ඹ
-///  a=අ aa=ආ ae/A=ඇ aae/AA=ඈ i=ඉ ii/ee=ඊ u=උ uu=ඌ e=එ E/ea=ඒ o=ඔ O/oo=ඕ ai=ඓ au=ඖ Ru=ඍ
+///  a=අ aa=ආ ae/A=ඇ aae/AA=ඈ i=ඉ ii=ඊ u=උ uu=ඌ e=එ ee/E/ea=ඒ o=ඔ O/oo=ඕ ai=ඓ au=ඖ Ru=ඍ
 ///  consonant + r/y + vowel → rakaransaya / yansaya (ක්‍ර, ක්‍ය)
 enum Singlish {
     // MARK: tables (BEGIN-TABLES — parsed by tests/singlish.test.js, keep one entry per line)
@@ -17,7 +17,7 @@ enum Singlish {
         "aee": ("ඈ", "ෑ"),
         "i": ("ඉ", "ි"),
         "ii": ("ඊ", "ී"),
-        "ee": ("ඊ", "ී"),
+        "ee": ("ඒ", "ේ"),
         "I": ("ඊ", "ී"),
         "u": ("උ", "ු"),
         "uu": ("ඌ", "ූ"),
@@ -160,7 +160,7 @@ enum Singlish {
     /// Spelling variants people commonly mean (t/th, d/dh, n/N, l/L, s/sh, ee/E, oo/uu, nd/ඳ, ng/ඟ, mb/ඹ)
     static let variantRules: [(String, String)] = [
         ("th", "t"), ("t", "th"), ("dh", "d"), ("d", "dh"), ("n", "N"), ("l", "L"), ("s", "sh"), ("sh", "s"),
-        ("ee", "E"), ("oo", "uu"), ("uu", "oo"), ("nd", "zdh"), ("ng", "zg"), ("mb", "zb"), ("ndh", "zdh"), ("e", "E"), ("a", "aa"), ("i", "ii"), ("u", "uu"),
+        ("ee", "ii"), ("ii", "ee"), ("oo", "uu"), ("uu", "oo"), ("nd", "zdh"), ("ng", "zg"), ("mb", "zb"), ("ndh", "zdh"), ("e", "E"), ("a", "aa"), ("i", "ii"), ("u", "uu"),
     ]
 
     /// Returns alternative Sinhala spellings for a roman word (each rule applied once at each position).
@@ -190,7 +190,7 @@ enum Singlish {
     // MARK: skeletons (fuzzy keys used to match dictionary words)
     static func romanSkeleton(_ roman: String) -> String {
         var r = roman.lowercased()
-        for (a, b) in [("zdh", "nd"), ("zd", "nd"), ("zg", "ng"), ("zb", "mb"), ("zj", "nj"), ("x", "n"), ("w", "v"), ("aee", "a"), ("aae", "a"), ("ae", "a"), ("ee", "i"), ("oo", "u"), ("ea", "e"), ("ou", "au"), ("nd", "d"), ("ng", "g"), ("mb", "b")] {
+        for (a, b) in [("zdh", "nd"), ("zd", "nd"), ("zg", "ng"), ("zb", "mb"), ("zj", "nj"), ("x", "n"), ("w", "v"), ("aee", "a"), ("aae", "a"), ("ae", "a"), ("ee", "e"), ("ii", "i"), ("oo", "u"), ("ea", "e"), ("ou", "au"), ("nd", "d"), ("ng", "g"), ("mb", "b")] {
             r = r.replacingOccurrences(of: a, with: b)
         }
         // aspiration markers: kh→k, th→t ...

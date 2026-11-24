@@ -5,7 +5,7 @@ const grab = (name) => Object.fromEntries([...src.split(`static let ${name}`)[1]
 const sinhalaRoman = grab('sinhalaRoman'), signRoman = grab('signRoman');
 function romanSkeleton(r) {
   r = r.toLowerCase();
-  for (const [a, b] of [['zdh','nd'],['zd','nd'],['zg','ng'],['zb','mb'],['zj','nj'],['x','n'],['w','v'],['aee','a'],['aae','a'],['ae','a'],['ee','i'],['oo','u'],['ea','e'],['ou','au'],['nd','d'],['ng','g'],['mb','b']]) r = r.split(a).join(b);
+  for (const [a, b] of [['zdh','nd'],['zd','nd'],['zg','ng'],['zb','mb'],['zj','nj'],['x','n'],['w','v'],['aee','a'],['aae','a'],['ae','a'],['ee','e'],['ii','i'],['oo','u'],['ea','e'],['ou','au'],['nd','d'],['ng','g'],['mb','b']]) r = r.split(a).join(b);
   let out = '', prev = ' ';
   const cs=[...r]; for (let i=0;i<cs.length;i++) { const ch=cs[i]; if (ch==='y' && 'aeiou'.includes(prev) && i+1<cs.length && 'aeiou'.includes(cs[i+1])) continue; if (ch === 'h' && 'kgcjtdpbs'.includes(prev)) continue; if (ch === prev) continue; out += ch; prev = ch; }
   return out;

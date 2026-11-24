@@ -34,7 +34,7 @@ const cases = {
   amma: 'අම්මා'.replace('ා', ''), // amma → අම්ම
   ammaa: 'අම්මා', thaaththaa: 'තාත්තා', thaththaa: 'තත්තා', lankaava: 'ලන්කාව', laxkaava: 'ලංකාව', shrii: 'ශ්‍රී', prashnaya: 'ප්‍රශ්නය', vidhyaava: 'විද්‍යාව',
   kohomadha: 'කොහොමද', mama: 'මම', oyaa: 'ඔයා', hodhayi: 'හොදයි', hozdhayi: 'හොඳයි', sthuthiyi: 'ස්තුතියි', aayuboovan: 'ආයුබෝවන්', aayubowan: 'ආයුබොවන්',
-  geeya: 'ගීය', siKhaa: 'සිඛා', Ruthuva: 'ඍතුව', kRuthi: 'කෘති', paasala: 'පාසල', sinhala: 'සින්හල', sixhala: 'සිංහල', kaeema: 'කෑම'.replace('ෑ','ැ') + '', baeheyi: 'බැහෙයි',
+  geeya: 'ගේය', giiya: 'ගීය', kee: 'කේ', ee: 'ඒ', kii: 'කී', siKhaa: 'සිඛා', Ruthuva: 'ඍතුව', kRuthi: 'කෘති', paasala: 'පාසල', sinhala: 'සින්හල', sixhala: 'සිංහල', kaeema: 'කෑම'.replace('ෑ','ැ') + '', baeheyi: 'බැහෙයි',
   gedhara: 'ගෙදර', LamayaaTa: 'ළමයාඨ', lamayaata: 'ලමයාට', eyaa: 'එයා', Eka: 'ඒක', mokakdha: 'මොකක්ද', karanna: 'කරන්න', kaeevaadha: 'කෑවාද',
 };
 cases.kaeema = 'කෑම';
