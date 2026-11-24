@@ -69,7 +69,7 @@ jobs:
                            "subtitle": "Singlish → සිංහල keyboard with AI", "localizedDescription": "Sinhala (Singlish) keyboard with smart suggestions, AI translate, grammar fix, clipboard history, emoji and themes.",
                            "iconURL": icon, "tintColor": "3B6CFF", "category": "utilities",
                            "versions": [{"version": ver, "buildVersion": run, "date": now, "localizedDescription": "\n".join(notes), "downloadURL": ipa, "size": size, "minOSVersion": "16.0"}],
-                           "appPermissions": {"entitlements": ["com.apple.security.application-groups"], "privacy": {"NSPhotoLibraryUsageDescription": "Keyboard background එකට photo එකක් තෝරන්න.", "NSFaceIDUsageDescription": "Secret Chats Face ID එකෙන් විවෘත කරන්න."}}}],
+                           "appPermissions": {"entitlements": ["com.apple.security.application-groups"], "privacy": {"NSPhotoLibraryUsageDescription": "Keyboard background එකට photo එකක් තෝරන්න.", "NSFaceIDUsageDescription": "Secret Chats Face ID එකෙන් විවෘත කරන්න.", "NSMicrophoneUsageDescription": "Chat එකේ voice messages record කරන්න."}}}],
                  "news": []}
           json.dump(src, open("altstore.json", "w"), ensure_ascii=False, indent=1)
           print(open("update.json").read())

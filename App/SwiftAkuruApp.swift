@@ -11,14 +11,14 @@ struct SwiftAkuruApp: App {
 struct RootView: View {
     var body: some View {
         TabView {
-            HomeView().tabItem { Label("Setup", systemImage: "keyboard") }
-            GuideView().tabItem { Label("Singlish", systemImage: "character.book.closed") }
-            ChatRootView().tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
-            AISettingsView().tabItem { Label("AI", systemImage: "sparkles") }
-            ThemesView().tabItem { Label("Themes", systemImage: "paintpalette") }
-            MoreView().tabItem { Label("More", systemImage: "ellipsis.circle") }
+            HomeView().tabItem { Label("Keyboard", systemImage: "keyboard") }
+            ChatsTab().tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right") }
+            SecretTab().tabItem { Label("Secret", systemImage: "lock") }
+            SearchTab().tabItem { Label("Search", systemImage: "magnifyingglass") }
+            SettingsTab().tabItem { Label("Settings", systemImage: "gearshape") }
         }
-        .tint(Color(red: 0.23, green: 0.42, blue: 1))
+        .tint(swiftPurple)
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -166,7 +166,7 @@ struct GuideView: View {
         ("u / uu", "උ / ඌ"), ("e / ee", "එ / ඒ (කේ = kee)"), ("o / O", "ඔ / ඕ"), ("ai / au", "ඓ / ඖ"), ("Ru", "ඍ (කෘ)"), ("kr+vowel / ky+vowel", "ක්‍ර / ක්‍ය"),
     ]
     var body: some View {
-        NavigationStack {
+        Group {
             List {
                 Section("උදාහරණ") { ForEach(rows.indices, id: \.self) { k in let r = rows[k]; HStack { Text(r.0).font(.body.monospaced()); Spacer(); Text(r.1).font(.title3) } } }
                 Section("අකුරු") { ForEach(letters.indices, id: \.self) { k in let r = letters[k]; HStack { Text(r.0).font(.body.monospaced()); Spacer(); Text(r.1).font(.title3) } } }
@@ -191,7 +191,7 @@ struct AISettingsView: View {
     @State private var testOut = ""
     @State private var testing = false
     var body: some View {
-        NavigationStack {
+        Group {
             Form {
                 Section {
                     Picker("Provider", selection: $provider) { Text("Google Gemini (free)").tag("gemini"); Text("OpenAI").tag("openai") }
@@ -234,7 +234,7 @@ struct ThemesView: View {
     @State private var saved = false
     let cols = [GridItem(.adaptive(minimum: 150), spacing: 12)]
     var body: some View {
-        NavigationStack {
+        Group {
             ScrollView {
                 LazyVGrid(columns: cols, spacing: 12) {
                     ForEach(KBTheme.all, id: \.id) { t in
@@ -288,7 +288,7 @@ struct MoreView: View {
     @State private var checking = false
     @State private var checkMsg = ""
     var body: some View {
-        NavigationStack {
+        Group {
             List {
                 Section {
                     ForEach(shortcuts.indices, id: \.self) { k in let s = shortcuts[k]; VStack(alignment: .leading) { Text(s.0).font(.body.monospaced().bold()); Text(s.1).foregroundStyle(.secondary) } }

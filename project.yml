@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.2.0"
+    MARKETING_VERSION: "1.3.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""            # put your Apple Team ID here when you have a paid account
     CODE_SIGN_STYLE: Automatic
@@ -38,6 +38,7 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         NSPhotoLibraryUsageDescription: Keyboard background එකට photo එකක් තෝරන්න.
         NSFaceIDUsageDescription: Secret Chats Face ID එකෙන් විවෘත කරන්න.
+        NSMicrophoneUsageDescription: Chat එකේ voice messages record කරන්න.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru

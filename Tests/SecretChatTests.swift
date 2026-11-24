@@ -222,3 +222,84 @@ final class ChatDBTests: XCTestCase {
         XCTAssertNil(raw.range(of: Data("771234567".utf8)), "phone numbers are stored only as keyed hashes")
     }
 }
+
+// MARK: - v1.3 features
+final class EnvelopeAndMediaTests: XCTestCase {
+    func testV1EnvelopeStillDecodes() throws {
+        let v1 = Data(#"{"text":"hello","sentAt":5}"#.utf8)
+        let e = try JSONDecoder().decode(ChatCrypto.Envelope.self, from: v1)
+        XCTAssertEqual(e.text, "hello"); XCTAssertNil(e.kind); XCTAssertNil(e.media)
+    }
+    func testMediaEncryptRoundTripAndTamper() throws {
+        let data = Data((0..<5000).map { UInt8($0 % 251) })
+        let (box, key) = try MediaCipher.encrypt(data)
+        XCTAssertNil(box.range(of: data.prefix(64)), "ciphertext must not contain the file bytes")
+        XCTAssertEqual(try MediaCipher.decrypt(box, key: key), data)
+        var bad = box; bad[bad.startIndex + 20] ^= 0xFF
+        XCTAssertThrowsError(try MediaCipher.decrypt(bad, key: key), "tampered attachment must fail")
+        let (_, otherKey) = try MediaCipher.encrypt(Data([1]))
+        XCTAssertThrowsError(try MediaCipher.decrypt(box, key: otherKey), "wrong key must fail")
+    }
+}
+
+final class ChatDBv2Tests: XCTestCase {
+    var db: ChatDB!
+    var url: URL!
+    override func setUp() {
+        url = FileManager.default.temporaryDirectory.appendingPathComponent("chat2-\(UUID().uuidString).sqlite")
+        db = ChatDB(url: url, key: SymmetricKey(size: .bits256))
+        db.upsertConversation(id: "c1", partnerId: "B", partnerName: "Bee", partnerKey: "K1", keyVersion: 1, secret: true)
+    }
+    override func tearDown() { db = nil; try? FileManager.default.removeItem(at: url) }
+    func msg(_ id: String, _ t: Int, out: Bool = false, ttl: Int? = nil, kind: String = "text") -> ChatMessage {
+        var m = ChatMessage(id: id, conversationId: "c1", outgoing: out, text: "t\(t)", sentAt: t, status: out ? .sent : .received, readByMe: out, serverSeq: t, kind: kind)
+        m.ttl = ttl
+        return m
+    }
+
+    func testDisappearingCountdownStartsWhenRead() {
+        db.insertMessage(msg("d1", 1, ttl: 30))
+        XCTAssertNil(db.message("d1")?.expiresAt, "not counting before it is read")
+        XCTAssertEqual(db.deleteExpired(now: 10_000_000_000), 0, "unread disappearing message is kept")
+        db.markReadByMe(ids: ["d1"], now: 1000)
+        XCTAssertEqual(db.message("d1")?.expiresAt, 1030)
+        XCTAssertEqual(db.deleteExpired(now: 1029), 0)
+        XCTAssertEqual(db.deleteExpired(now: 1031), 1)
+        XCTAssertNil(db.message("d1"), "expired message removed from the device")
+    }
+    func testKeepLastFive() {
+        for i in 1...8 { db.insertMessage(msg("k\(i)", i)) }
+        db.setKeepLast(5, conversationId: "c1")
+        XCTAssertEqual(db.messages(conversationId: "c1").map(\.sentAt), [4, 5, 6, 7, 8])
+        db.insertMessage(msg("k9", 9))
+        XCTAssertEqual(db.messages(conversationId: "c1").map(\.sentAt), [5, 6, 7, 8, 9], "older messages are actually deleted")
+        XCTAssertNil(db.message("k4"))
+    }
+    func testDeleteForEveryoneWipesContent() throws {
+        var m = msg("x1", 1, out: true)
+        m.text = "මකන්න ඕන රහස"
+        m.media = ChatCrypto.MediaRef(id: "m1", key: "k", mime: "image/jpeg", name: "a.jpg", size: 10)
+        db.insertMessage(m)
+        db.markDeleted(id: "x1")
+        let after = try XCTUnwrap(db.message("x1"))
+        XCTAssertTrue(after.deleted); XCTAssertEqual(after.text, ""); XCTAssertNil(after.media)
+    }
+    func testControlMessagesHiddenAndReplyStored() {
+        db.insertMessage(msg("c1m", 1, out: true, kind: "ctl"))
+        var r = msg("r1", 2)
+        r.replyTo = "x"; r.replyText = "quoted"
+        db.insertMessage(r)
+        let visible = db.messages(conversationId: "c1")
+        XCTAssertEqual(visible.map(\.id), ["r1"], "control messages never show")
+        XCTAssertEqual(visible.first?.replyText, "quoted")
+        XCTAssertEqual(db.outbox().map(\.id), [], "sent control messages are not pending")
+    }
+    func testMessageRequestDetection() {
+        db.upsertConversation(id: "c2", partnerId: "C", partnerName: "Cee", partnerKey: "K", keyVersion: 1, secret: false, accepted: false, requestedBy: "C")
+        db.upsertConversation(id: "c3", partnerId: "D", partnerName: "Dee", partnerKey: "K", keyVersion: 1, secret: false, accepted: false, requestedBy: "ME")
+        XCTAssertTrue(db.conversation("c2")!.isIncomingRequest(myId: "ME"))
+        XCTAssertFalse(db.conversation("c3")!.isIncomingRequest(myId: "ME"), "my own request is not an incoming request")
+        db.setAccepted(conversationId: "c2")
+        XCTAssertFalse(db.conversation("c2")!.isIncomingRequest(myId: "ME"))
+    }
+}

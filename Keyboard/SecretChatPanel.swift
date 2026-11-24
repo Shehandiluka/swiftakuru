@@ -313,12 +313,18 @@ final class SecretChatPanel: UIView, ThemedPanel {
     }
 
     private func bubble(_ m: ChatMessage) -> UIView {
+        if m.kind == "system" {
+            let sys = UILabel()
+            sys.text = m.text; sys.font = .systemFont(ofSize: 11); sys.textColor = theme.specialText
+            sys.textAlignment = .center; sys.numberOfLines = 1
+            return sys
+        }
         let l = UILabel()
         let t = Date(timeIntervalSince1970: TimeInterval(m.sentAt))
         let f = DateFormatter(); f.dateFormat = Calendar.current.isDateInToday(t) ? "HH:mm" : "d MMM HH:mm"
         let status: String
         switch m.status { case .pending: status = " ⏱"; case .failed: status = " ⚠︎"; case .sent: status = " ✓"; case .delivered: status = " ✓✓"; case .read: status = " ✓✓👁"; case .received: status = "" }
-        l.text = m.text
+        l.text = (m.replyText.map { "↩︎ " + $0 + " · " } ?? "") + m.preview + (m.ttl != nil ? " ⏱" : "")
         l.numberOfLines = 2
         l.font = .systemFont(ofSize: 14)
         l.textColor = m.outgoing ? .white : theme.keyText

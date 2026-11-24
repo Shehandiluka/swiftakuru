@@ -18,9 +18,42 @@ enum ChatCrypto {
 
     struct Sealed: Equatable { let enc: Data; let ciphertext: Data }
 
+    /// The encrypted payload. v1 had only text + sentAt; v2 fields are optional so old messages still decode.
     struct Envelope: Codable, Equatable {
-        let text: String
+        var text: String
         let sentAt: Int
+        /// nil/"text" | "media" | "delete" | "timer" | "history" | "screenshot"
+        var kind: String? = nil
+        var ref: String? = nil          // message id this refers to (reply target / message to delete)
+        var replyText: String? = nil    // short quote of the replied message
+        var ttl: Int? = nil             // disappearing: seconds (on a message = its timer; on "timer" = new chat default, 0 = off)
+        var keep: Int? = nil            // "history": keep only the newest N messages (0 = all)
+        var media: MediaRef? = nil
+        var forwarded: Bool? = nil
+
+        init(text: String, sentAt: Int, kind: String? = nil, ref: String? = nil, replyText: String? = nil, ttl: Int? = nil,
+             keep: Int? = nil, media: MediaRef? = nil, forwarded: Bool? = nil) {
+            self.text = text; self.sentAt = sentAt; self.kind = kind; self.ref = ref; self.replyText = replyText
+            self.ttl = ttl; self.keep = keep; self.media = media; self.forwarded = forwarded
+        }
+    }
+
+    /// An attachment: bytes are AES-256-GCM encrypted on the phone with `key` and uploaded; the key only
+    /// travels inside the end-to-end encrypted envelope.
+    struct MediaRef: Codable, Equatable {
+        var id: String
+        var key: String                 // base64, 32 bytes
+        var mime: String
+        var name: String?
+        var size: Int
+        var duration: Double? = nil     // seconds (voice / video)
+        var thumb: String? = nil        // tiny JPEG preview (base64), images & videos
+        var kindLabel: String {
+            if mime.hasPrefix("image/") { return "📷 Photo" }
+            if mime.hasPrefix("video/") { return "🎬 Video" }
+            if mime.hasPrefix("audio/") { return "🎤 Voice message" }
+            return "📎 " + (name ?? "File")
+        }
     }
 
     enum CryptoError: Error { case unsupportedOS, badKey, decryptFailed }
@@ -90,6 +123,20 @@ enum ChatIdentity {
     static func currentOrCreate() -> Curve25519.KeyAgreement.PrivateKey { current() ?? create() }
     static func publicBase64(_ k: Curve25519.KeyAgreement.PrivateKey) -> String { k.publicKey.rawRepresentation.base64EncodedString() }
     static func delete() { SecureStore.delete(SecureStore.Keys.identity) }
+}
+
+/// Attachment encryption: fresh random key per file, AES-256-GCM (nonce + tag in the combined box).
+enum MediaCipher {
+    static func encrypt(_ data: Data) throws -> (box: Data, key: String) {
+        let k = SymmetricKey(size: .bits256)
+        guard let combined = try AES.GCM.seal(data, using: k).combined else { throw ChatCrypto.CryptoError.badKey }
+        return (combined, k.withUnsafeBytes { Data($0) }.base64EncodedString())
+    }
+    static func decrypt(_ box: Data, key b64: String) throws -> Data {
+        guard let kd = Data(base64Encoded: b64), kd.count == 32 else { throw ChatCrypto.CryptoError.badKey }
+        do { return try AES.GCM.open(AES.GCM.SealedBox(combined: box), using: SymmetricKey(data: kd)) }
+        catch { throw ChatCrypto.CryptoError.decryptFailed }
+    }
 }
 
 /// AES-GCM encryption for message bodies stored in the local SQLite database.

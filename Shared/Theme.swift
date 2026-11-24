@@ -21,6 +21,7 @@ struct KBTheme {
     }
 
     static let all: [KBTheme] = [
+        KBTheme(id: "graphite", name: "Premium Graphite", background: hex(0x141418), key: hex(0x2B2B33), keyText: hex(0xE8E8EE), special: hex(0x1D1D23), specialText: hex(0xC3C6CF), accent: hex(0x8E66FF), bar: hex(0x141418), hint: hex(0xB9A6FF), shadow: hex(0x000000, 0.55), dark: true, gradient: [hex(0x16161B), hex(0x231E33)]),
         KBTheme(id: "swift", name: "Swift Blue", background: hex(0x0B1220), key: hex(0x1B2740), keyText: .white, special: hex(0x111A2E), specialText: hex(0xC7D2FE), accent: hex(0x3B6CFF), bar: hex(0x0B1220), hint: hex(0x8FB3FF), shadow: hex(0x000000, 0.5), dark: true, gradient: [hex(0x0B1220), hex(0x1E1B4B)]),
         KBTheme(id: "light", name: "Light", background: hex(0xD1D5DB), key: .white, keyText: hex(0x111827), special: hex(0xAEB4BE), specialText: hex(0x111827), accent: hex(0x2563FF), bar: hex(0xD1D5DB), hint: hex(0x6B7280), shadow: hex(0x000000, 0.3), dark: false),
         KBTheme(id: "dark", name: "Dark", background: hex(0x1C1C1E), key: hex(0x48484A), keyText: .white, special: hex(0x2C2C2E), specialText: .white, accent: hex(0x0A84FF), bar: hex(0x1C1C1E), hint: hex(0x9CA3AF), shadow: hex(0x000000, 0.6), dark: true),

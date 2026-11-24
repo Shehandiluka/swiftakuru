@@ -53,6 +53,15 @@ final class KeyButton: UIControl {
         hintLabel.textColor = t.hint
     }
 
+    /// Subtle press animation (skipped when Reduce Motion is on).
+    func animatePress(_ down: Bool) {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        UIView.animate(withDuration: down ? 0.05 : 0.14, delay: 0, usingSpringWithDamping: down ? 1 : 0.6, initialSpringVelocity: 0,
+                       options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.bg.transform = down ? CGAffineTransform(scaleX: 0.92, y: 0.92) : .identity
+        }
+    }
+
     // A slightly larger hit area to make typing forgiving
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool { bounds.insetBy(dx: -2, dy: -3).contains(point) }
 }
@@ -148,16 +157,19 @@ final class KeyboardView: UIView {
     // MARK: touches
     @objc private func down(_ b: KeyButton) {
         b.apply(theme: theme, highlighted: true, active: b.spec.kind == .shift && shiftState > 0)
+        b.animatePress(true)
         if case .char = b.spec.kind { showBubble(b) }
         onKey?(b.spec, .down)
     }
     @objc private func up(_ b: KeyButton) {
         hideBubble()
+        b.animatePress(false)
         b.apply(theme: theme, active: b.spec.kind == .shift && shiftState > 0)
         onKey?(b.spec, .up)
     }
     @objc private func cancel(_ b: KeyButton) {
         hideBubble()
+        b.animatePress(false)
         b.apply(theme: theme, active: b.spec.kind == .shift && shiftState > 0)
         if b.spec.kind == .backspace { onKey?(b.spec, .cursorEnd) }
     }

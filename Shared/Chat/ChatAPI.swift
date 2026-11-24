@@ -6,12 +6,21 @@ struct ChatAPI {
 
     struct APIError: Error, Equatable { let status: Int; let code: String }
 
-    struct User: Codable, Equatable { let id: String; let displayName: String; let kemPub: String?; let keyVersion: Int; var deleted: Bool? }
-    struct Me: Codable, Equatable { let id: String; let displayName: String; let discoverable: Bool; let kemPub: String; let keyVersion: Int; let createdAt: Int }
+    struct User: Codable, Equatable {
+        let id: String; let displayName: String; let kemPub: String?; let keyVersion: Int; var deleted: Bool?
+        var avatar: String?; var lastSeen: Int?; var acceptsRequests: Bool?
+    }
+    struct Me: Codable, Equatable {
+        let id: String; let displayName: String; let discoverable: Bool; let kemPub: String; let keyVersion: Int; let createdAt: Int
+        var avatar: String?; var allowRequests: Bool?; var profileVisibility: String?; var lastSeenVisibility: String?; var readReceipts: Bool?
+    }
+    struct Blocked: Codable, Identifiable { let id: String; let displayName: String }
+    struct BlocksResponse: Codable { let blocked: [Blocked] }
+    struct MediaUpload: Codable { let id: String; let size: Int }
     struct VerifyResponse: Codable { let token: String; let created: Bool; let user: Me }
     struct LookupResponse: Codable { let found: Bool; let user: User? }
     struct ResolveResponse: Codable { let found: Bool; let conversationId: String?; let user: User? }
-    struct Conversation: Codable { let id: String; let secret: Bool; let createdAt: Int; let partner: User }
+    struct Conversation: Codable { let id: String; let secret: Bool; let createdAt: Int; let partner: User; var accepted: Bool?; var requestedBy: String? }
     struct ConversationsResponse: Codable { let conversations: [Conversation] }
     struct NewConversation: Codable { let conversationId: String }
     struct SendResponse: Codable { let seq: Int; let duplicate: Bool }
@@ -50,11 +59,9 @@ struct ChatAPI {
         try await request("POST", "/v1/auth/verify", body: ["phone": phone, "code": code, "displayName": name, "kemPub": kemPub, "discoverable": discoverable, "device": "iPhone"])
     }
     func me() async throws -> Me { try await request("GET", "/v1/me", as: MeResponse.self).user }
-    func updateMe(name: String? = nil, discoverable: Bool? = nil) async throws -> Me {
-        var b: [String: Any] = [:]
-        if let n = name { b["displayName"] = n }
-        if let d = discoverable { b["discoverable"] = d }
-        return try await request("PATCH", "/v1/me", body: b, as: MeResponse.self).user
+    func updateMe(_ fields: [String: Any]) async throws -> Me { try await request("PATCH", "/v1/me", body: fields, as: MeResponse.self).user }
+    func setAvatar(_ jpegBase64: String?) async throws -> Me {
+        try await request("PUT", "/v1/me/avatar", body: ["avatar": jpegBase64.map { $0 as Any } ?? NSNull()], as: MeResponse.self).user
     }
     func rotateKey(_ kemPub: String) async throws -> Me { try await request("PUT", "/v1/me/keys", body: ["kemPub": kemPub], as: MeResponse.self).user }
     func deleteAccount() async throws { _ = try await request("DELETE", "/v1/me", as: OK.self) }
@@ -66,6 +73,31 @@ struct ChatAPI {
     func conversations() async throws -> [Conversation] { try await request("GET", "/v1/conversations", as: ConversationsResponse.self).conversations }
     func startConversation(userId: String) async throws -> String { try await request("POST", "/v1/conversations", body: ["userId": userId], as: NewConversation.self).conversationId }
     func hideConversation(_ id: String) async throws { _ = try await request("DELETE", "/v1/conversations/\(id)", as: OK.self) }
+    func acceptRequest(_ id: String) async throws { _ = try await request("POST", "/v1/conversations/\(id)/accept", as: OK.self) }
+    func typing(_ id: String) async throws { _ = try await request("POST", "/v1/conversations/\(id)/typing", as: OK.self) }
+
+    // encrypted attachments
+    func uploadMedia(_ box: Data, conversationId: String) async throws -> MediaUpload {
+        guard let url = URL(string: ChatAPI.baseURL.absoluteString + "/v1/media?conversationId=" + conversationId) else { throw APIError(status: 0, code: "bad_url") }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"; req.timeoutInterval = 120
+        req.setValue("application/octet-stream", forHTTPHeaderField: "content-type")
+        if let t = token { req.setValue("Bearer " + t, forHTTPHeaderField: "authorization") }
+        let (data, resp) = try await URLSession.shared.upload(for: req, from: box)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw APIError(status: status, code: status == 413 ? "too_large" : "http_\(status)") }
+        return try JSONDecoder().decode(MediaUpload.self, from: data)
+    }
+    func downloadMedia(_ id: String) async throws -> Data {
+        guard let url = URL(string: ChatAPI.baseURL.absoluteString + "/v1/media/" + id) else { throw APIError(status: 0, code: "bad_url") }
+        var req = URLRequest(url: url); req.timeoutInterval = 120
+        if let t = token { req.setValue("Bearer " + t, forHTTPHeaderField: "authorization") }
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw APIError(status: status, code: "http_\(status)") }
+        return data
+    }
+    func deleteMedia(_ id: String) async throws { _ = try await request("DELETE", "/v1/media/\(id)", as: OK.self) }
 
     // messages
     func send(id: String, conversationId: String, enc: String, ciphertext: String, keyVersion: Int, sentAt: Int) async throws -> SendResponse {
@@ -85,6 +117,7 @@ struct ChatAPI {
     // safety
     func block(userId: String) async throws { _ = try await request("POST", "/v1/blocks", body: ["userId": userId], as: OK.self) }
     func unblock(userId: String) async throws { _ = try await request("DELETE", "/v1/blocks/\(userId)", as: OK.self) }
+    func blocked() async throws -> [Blocked] { try await request("GET", "/v1/blocks", as: BlocksResponse.self).blocked }
     func report(userId: String, conversationId: String?, reason: String) async throws {
         var b: [String: Any] = ["userId": userId, "reason": reason]
         if let c = conversationId { b["conversationId"] = c }
