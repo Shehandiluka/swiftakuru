@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// Settings shared by the app and the keyboard. Uses the App Group when it is available
 /// (paid developer account); otherwise each target keeps its own copy — the keyboard has
@@ -52,6 +53,7 @@ final class SharedStore {
             K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 50.0,
             K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false,
         ])
+        restoreAIKeys()
     }
 
     /// When an update starts using the App Group (e.g. after moving to SideStore), carry over what was
@@ -90,7 +92,10 @@ final class SharedStore {
     }
     subscript(string key: String) -> String {
         get { defaults.string(forKey: key) ?? "" }
-        set { defaults.set(newValue, forKey: key) }
+        set {
+            defaults.set(newValue, forKey: key)
+            if SharedStore.secretKeys.contains(key) { keychainSave(newValue, key) }
+        }
     }
     var layout: String { get { self[string: K.layout] } set { self[string: K.layout] = newValue } }
     var themeId: String { get { self[string: K.theme] } set { self[string: K.theme] = newValue } }
@@ -105,6 +110,56 @@ final class SharedStore {
     var recentEmoji: [String] {
         get { defaults.stringArray(forKey: K.recentEmoji) ?? [] }
         set { defaults.set(Array(newValue.prefix(32)), forKey: K.recentEmoji) }
+    }
+
+    // MARK: AI keys survive updates and reinstalls
+    /// The API keys are also kept in the Keychain (shared App Group access group and the app's own),
+    /// because a re-signed update can come with a new App Group, which starts with empty settings.
+    private static let keyService = "store.swiftpaypos.swiftakuru.ai"
+    private func keychainQueries(_ account: String) -> [[String: Any]] {
+        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                   kSecAttrService as String: SharedStore.keyService,
+                                   kSecAttrAccount as String: account]
+        var out: [[String: Any]] = []
+        if let g = activeGroup { var q = base; q[kSecAttrAccessGroup as String] = g; out.append(q) }
+        out.append(base)
+        return out
+    }
+    private func keychainSave(_ value: String, _ account: String) {
+        for q in keychainQueries(account) {
+            if value.isEmpty { SecItemDelete(q as CFDictionary); continue }
+            let attrs: [String: Any] = [kSecValueData as String: Data(value.utf8),
+                                        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
+            if SecItemUpdate(q as CFDictionary, attrs as CFDictionary) == errSecItemNotFound {
+                var add = q; for (k, v) in attrs { add[k] = v }
+                SecItemAdd(add as CFDictionary, nil)
+            }
+        }
+    }
+    private func keychainLoad(_ account: String) -> String? {
+        for var q in keychainQueries(account) {
+            q[kSecReturnData as String] = true
+            q[kSecMatchLimit as String] = kSecMatchLimitOne
+            var out: CFTypeRef?
+            if SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data,
+               let v = String(data: d, encoding: .utf8), !v.isEmpty { return v }
+        }
+        return nil
+    }
+    static let secretKeys = [K.aiKeyGemini, K.aiKeyOpenAI]
+    /// Call after an API key changes (the app's settings screen writes defaults directly).
+    func backupAIKeys() {
+        for k in SharedStore.secretKeys { keychainSave(self[string: k], k) }
+        defaults.set(self[string: K.aiProvider], forKey: K.aiProvider)
+    }
+    /// Empty settings (new App Group after an update) → bring the saved keys back from the Keychain.
+    private func restoreAIKeys() {
+        var restored = false
+        for k in SharedStore.secretKeys {
+            if (defaults.string(forKey: k) ?? "").isEmpty, let v = keychainLoad(k) { defaults.set(v, forKey: k); restored = true }
+            else if let v = defaults.string(forKey: k), !v.isEmpty, keychainLoad(k) != v { keychainSave(v, k) }
+        }
+        if restored, (defaults.string(forKey: K.aiKeyGemini) ?? "").isEmpty { defaults.set("openai", forKey: K.aiProvider) }
     }
 
     var aiKey: String {

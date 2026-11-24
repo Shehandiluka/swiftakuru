@@ -215,7 +215,10 @@ final class KeyboardViewController: UIInputViewController {
     private func tap(_ s: KeySpec) {
         switch s.kind {
         case .char(let c): typeChar(c)
-        case .space: space()
+        case .space:
+            space()
+            // like the iPhone keyboard: after a number or symbol, space goes back to the letters
+            if page == .numbers || page == .symbols { page = .letters; rebuildKeys(); updateAutoCap() }
         case .ret:
             if draft != nil { sendSecretDraft(); return }
             commitComposition()

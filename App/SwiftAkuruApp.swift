@@ -223,6 +223,8 @@ struct AISettingsView: View {
                     Text("🇬🇧 English · 🇱🇰 සිංහල · தமிழ் translate · ✓ Grammar fix · 👔 Formal · 😊 Friendly · ✂️ Shorter · 💬 Reply ideas · ✨ Ask AI · 🎉 + Emoji").font(.subheadline)
                 }
             }.navigationTitle("Swift AI")
+            .onChange(of: gemini) { _ in SharedStore.shared.backupAIKeys() }
+            .onChange(of: openai) { _ in SharedStore.shared.backupAIKeys() }
         }
     }
 }

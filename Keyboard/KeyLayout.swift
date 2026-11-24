@@ -96,9 +96,8 @@ enum KeyLayout {
     static func bottomRow(singlish: Bool, page: KeyPage, showGlobe: Bool) -> [KeySpec] {
         var r: [KeySpec] = [KeySpec(kind: .page(page == .letters ? .numbers : .letters), label: page == .letters ? "123" : "ABC", width: 1.3)]
         if showGlobe { r.append(KeySpec(kind: .globe, label: "globe", width: 1.1)) }
-        r.append(KeySpec(kind: .emoji, label: "emoji", width: 1.1))
-        if singlish { r.append(KeySpec(kind: .page(page.isSinhala ? .letters : .sinhala1), label: page.isSinhala ? "abc" : "අ", width: 1.1)) }
-        r.append(KeySpec(kind: .space, label: singlish ? "සිංහල" : "English", width: showGlobe ? 3.6 : 4.4))
+        // emoji and අ pages open from the bar above the keys, so the space bar gets that room
+        r.append(KeySpec(kind: .space, label: singlish ? "සිංහල" : "English", width: showGlobe ? 5.8 : 6.6))
         r.append(KeySpec(kind: .lang, label: singlish ? "EN" : "සිං", width: 1.1))
         r.append(KeySpec(kind: .ret, label: "return", width: 1.9))
         return r
