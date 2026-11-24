@@ -339,8 +339,8 @@ final class KeyboardView: UIView {
 
 extension KeyboardView: UIGestureRecognizerDelegate {
     /// The space-bar cursor drag starts only after a clear sideways slide, so a quick space tap is never eaten.
-    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
-        guard let pan = g as? UIPanGestureRecognizer else { return true }
+    override func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        guard let pan = g as? UIPanGestureRecognizer, pan.view is KeyButton else { return super.gestureRecognizerShouldBegin(g) }
         let t = pan.translation(in: self)
         return abs(t.x) > 12 && abs(t.x) > abs(t.y) * 1.5
     }
