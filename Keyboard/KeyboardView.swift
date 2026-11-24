@@ -79,6 +79,8 @@ final class KeyboardView: UIView {
     private var altChoices: [KeyAlt] = []
     private var altIndex = 0
     var shiftState = 0 // 0 off, 1 on, 2 lock
+    fileprivate var glowState: (timer: Timer?, step: Int, cycles: Int, lit: KeyButton?) = (nil, 0, 0, nil)
+    var nameGlowEnabled = true { didSet { if !nameGlowEnabled { stopNameGlow() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -92,6 +94,8 @@ final class KeyboardView: UIView {
     private var consumed = Set<ObjectIdentifier>()
 
     func setRows(_ specs: [[KeySpec]]) {
+        stopNameGlow()
+        defer { scheduleNameGlow() }
         // Same shape (e.g. shift / auto-capital changed): keep the existing key views and only swap
         // what they type. Replacing them would drop a finger that is already down on a key.
         if rows.count == specs.count, zip(rows, specs).allSatisfy({ $0.count == $1.count && zip($0, $1).allSatisfy { sameKind($0.spec.kind, $1.kind) } }) {
@@ -205,6 +209,7 @@ final class KeyboardView: UIView {
 
     // MARK: touches
     @objc private func down(_ b: KeyButton) {
+        stopNameGlow()
         // Fast typing: the next key went down before the last one came up — type the earlier one now,
         // in order, exactly like the system keyboard. Nothing is lost and nothing is swapped.
         if altView == nil, !panning {
@@ -227,6 +232,7 @@ final class KeyboardView: UIView {
         held.removeAll { $0 === b }
         b.animatePress(false)
         b.apply(theme: theme, active: b.spec.kind == .shift && shiftState > 0)
+        scheduleNameGlow()
         if consumed.remove(ObjectIdentifier(b)) != nil { return }   // already typed by the next key press
         onKey?(b.spec, .up)
     }
@@ -343,5 +349,70 @@ extension KeyboardView: UIGestureRecognizerDelegate {
         guard let pan = g as? UIPanGestureRecognizer, pan.view is KeyButton else { return super.gestureRecognizerShouldBegin(g) }
         let t = pan.translation(in: self)
         return abs(t.x) > 12 && abs(t.x) > abs(t.y) * 1.5
+    }
+}
+
+// MARK: - "SHEHAN" idle glow
+/// When nobody is typing, the S-H-E-H-A-N keys light up one after another so the name can be read.
+/// It only changes key colours; the first touch stops it instantly and restores the keys, so typing is never affected.
+extension KeyboardView {
+    private static let glowName = Array("shehan")
+    private var glow: (timer: Timer?, step: Int, cycles: Int, lit: KeyButton?) {
+        get { glowState }
+        set { glowState = newValue }
+    }
+
+    func scheduleNameGlow(after delay: TimeInterval = 3.5) {
+        glow.timer?.invalidate()
+        guard nameGlowEnabled else { return }
+        let t = Timer(timeInterval: delay, repeats: false) { [weak self] _ in self?.glowStep() }
+        RunLoop.main.add(t, forMode: .common)
+        glow = (t, 0, 0, nil)
+    }
+
+    func stopNameGlow() {
+        let g = glow
+        g.timer?.invalidate()
+        if let b = g.lit { b.layer.removeAllAnimations(); b.bg.layer.removeAllAnimations(); b.apply(theme: theme, active: b.spec.kind == .shift && shiftState > 0) }
+        glow = (nil, 0, 0, nil)
+    }
+
+    private func key(for letter: Character) -> KeyButton? {
+        for b in rows.flatMap({ $0 }) where !b.isHidden {
+            if case .char(let c) = b.spec.kind, c.count == 1, c.lowercased() == String(letter) { return b }
+        }
+        return nil
+    }
+
+    private func glowStep() {
+        guard nameGlowEnabled, window != nil, !isHidden, held.isEmpty else { stopNameGlow(); return }
+        var g = glow
+        if let prev = g.lit {
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+                prev.apply(theme: self.theme)
+            }
+            g.lit = nil
+        }
+        let names = KeyboardView.glowName
+        guard g.step < names.count, let b = key(for: names[g.step]) else {
+            // whole name shown (or this page has no such letters) — rest, then again a few times
+            g.cycles += 1
+            g.step = 0
+            let again = g.cycles < 6 && key(for: "s") != nil
+            g.timer = again ? Timer(timeInterval: 1.6, repeats: false) { [weak self] _ in self?.glowStep() } : nil
+            if let t = g.timer { RunLoop.main.add(t, forMode: .common) }
+            glow = g
+            return
+        }
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
+            b.bg.backgroundColor = self.theme.accent
+            b.label.textColor = .white
+        }
+        g.lit = b
+        g.step += 1
+        let t = Timer(timeInterval: 0.42, repeats: false) { [weak self] _ in self?.glowStep() }
+        RunLoop.main.add(t, forMode: .common)
+        g.timer = t
+        glow = g
     }
 }

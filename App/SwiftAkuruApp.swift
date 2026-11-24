@@ -3,8 +3,13 @@ import PhotosUI
 
 @main
 struct SwiftAkuruApp: App {
+    @Environment(\.scenePhase) private var phase
     var body: some Scene {
         WindowGroup { RootView() }
+            .onChange(of: phase) { p in
+                // keep a copy of the settings in the Keychain so an update never resets them
+                if p != .active { SharedStore.shared.backupSettings(); SharedStore.shared.backupAIKeys() }
+            }
     }
 }
 

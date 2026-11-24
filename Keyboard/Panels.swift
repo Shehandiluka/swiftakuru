@@ -527,6 +527,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         toggle("Space දෙපාරක් = full stop", SharedStore.K.doubleSpace)
         toggle("Emoji suggestions", SharedStore.K.emojiSuggest)
         toggle("මම type කරන වචන ඉගෙනගන්න", SharedStore.K.learnWords)
+        toggle("Type නොකරන වෙලාවට SHEHAN නම keys වල පෙන්නන්න", SharedStore.K.nameGlow, rebuild: true)
         header("CLIPBOARD")
         toggle("Copy කරන දේ auto save කරන්න", SharedStore.K.clipAuto)
         let clipNote = UILabel()

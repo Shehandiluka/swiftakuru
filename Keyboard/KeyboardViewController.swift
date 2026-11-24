@@ -107,6 +107,7 @@ final class KeyboardViewController: UIInputViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         ensureHeight()
+        keys.scheduleNameGlow()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -137,6 +138,8 @@ final class KeyboardViewController: UIInputViewController {
         if panel is SecretChatPanel { closePanel() }
         commitComposition()
         WordStore.shared.save()
+        store.backupSettings()
+        keys.stopNameGlow()
         super.viewWillDisappear(animated)
     }
 
@@ -154,6 +157,7 @@ final class KeyboardViewController: UIInputViewController {
             bgImage.image = img; bgImage.isHidden = false
         } else { bgImage.image = nil; bgImage.isHidden = true }
         keys.theme = theme
+        keys.nameGlowEnabled = store[bool: SharedStore.K.nameGlow]
         bar.theme = theme
         if heightC != nil { ensureHeight() }
         rebuildKeys()

@@ -51,9 +51,10 @@ final class SharedStore {
             K.layout: "singlish", K.theme: "graphite", K.sound: true, K.haptics: true, K.autoCap: true, K.autocorrect: true,
             K.doubleSpace: true, K.livePreview: true, K.keyHints: true, K.numberRow: false, K.aiProvider: "gemini",
             K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 50.0,
-            K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false,
+            K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false, K.nameGlow: true,
         ])
         restoreAIKeys()
+        restoreSettings()
     }
 
     /// When an update starts using the App Group (e.g. after moving to SideStore), carry over what was
@@ -83,7 +84,7 @@ final class SharedStore {
         static let doubleSpace = "doubleSpace", livePreview = "livePreview", keyHints = "keyHints", numberRow = "numberRow"
         static let aiProvider = "aiProvider", aiKeyGemini = "aiKeyGemini", aiKeyOpenAI = "aiKeyOpenAI", aiModelGemini = "aiModelGemini", aiModelOpenAI = "aiModelOpenAI"
         static let clipboardMax = "clipboardMax", keyHeight = "keyHeight", shortcuts = "shortcuts", emojiSuggest = "emojiSuggest", learnWords = "learnWords"
-        static let recentEmoji = "recentEmoji", customBg = "customBg", clipAuto = "clipAuto"
+        static let recentEmoji = "recentEmoji", customBg = "customBg", clipAuto = "clipAuto", nameGlow = "nameGlow"
     }
 
     subscript(bool key: String) -> Bool {
@@ -147,6 +148,30 @@ final class SharedStore {
         return nil
     }
     static let secretKeys = [K.aiKeyGemini, K.aiKeyOpenAI]
+
+    /// Every keyboard setting that should survive an update (AI keys are kept separately above).
+    static let settingKeys = [K.layout, K.theme, K.sound, K.haptics, K.autoCap, K.autocorrect, K.doubleSpace, K.livePreview, K.keyHints,
+                              K.numberRow, K.aiProvider, K.aiModelGemini, K.aiModelOpenAI, K.clipboardMax, K.keyHeight, K.shortcuts,
+                              K.emojiSuggest, K.learnWords, K.clipAuto, K.nameGlow]
+    private static let settingsAccount = "settings.v1"
+    private static let settingsMarker = "settingsRestoreChecked"
+
+    /// Saves the current settings to the Keychain, so a re-signed update that starts with empty settings gets them back.
+    func backupSettings() {
+        var snap: [String: Any] = [:]
+        for k in SharedStore.settingKeys { if let v = defaults.object(forKey: k) { snap[k] = v } }
+        guard PropertyListSerialization.propertyList(snap, isValidFor: .binary),
+              let d = try? PropertyListSerialization.data(fromPropertyList: snap, format: .binary, options: 0) else { return }
+        keychainSave(d.base64EncodedString(), SharedStore.settingsAccount)
+    }
+    private func restoreSettings() {
+        defer { defaults.set(true, forKey: SharedStore.settingsMarker) }
+        guard !defaults.bool(forKey: SharedStore.settingsMarker) else { return }   // these settings were already in use
+        // a fresh settings store (new install or new App Group after an update): bring back the saved settings
+        guard let b = keychainLoad(SharedStore.settingsAccount), let d = Data(base64Encoded: b),
+              let snap = (try? PropertyListSerialization.propertyList(from: d, options: [], format: nil)) as? [String: Any] else { return }
+        for (k, v) in snap where SharedStore.settingKeys.contains(k) { defaults.set(v, forKey: k) }
+    }
     /// Call after an API key changes (the app's settings screen writes defaults directly).
     func backupAIKeys() {
         for k in SharedStore.secretKeys { keychainSave(self[string: k], k) }
