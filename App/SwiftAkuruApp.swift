@@ -30,6 +30,11 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if let u = update { UpdateCard(u: u) }
+                    else if !UpdateChecker.installedWithSideStore {
+                        NavigationLink { NoLaptopGuide() } label: {
+                            Label("ඊළඟ updates laptop නැතුව ගන්න — setup", systemImage: "iphone.and.arrow.forward").frame(maxWidth: .infinity, alignment: .leading)
+                        }.buttonStyle(.bordered)
+                    }
                     HStack(spacing: 14) {
                         Image("Logo").resizable().frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 16))
                         VStack(alignment: .leading) {
@@ -58,7 +63,8 @@ struct HomeView: View {
     }
 }
 
-/// "New version" card – updates are installed with SideStore / AltStore (on the phone) or Sideloadly (PC).
+/// "New version" card. Installed through SideStore/AltStore → one tap. Otherwise (3uTools, Sideloadly…) →
+/// download the .ipa, plus a guide to move to SideStore once so future updates need no laptop.
 struct UpdateCard: View {
     let u: AppUpdate
     @Environment(\.openURL) private var openURL
@@ -67,16 +73,53 @@ struct UpdateCard: View {
             Label("Update එකක් තියෙනවා — v\(u.version) (build \(u.build))", systemImage: "arrow.down.circle.fill").font(.headline).foregroundStyle(.orange)
             ForEach(Array((u.notes ?? []).prefix(6).enumerated()), id: \.offset) { _, n in Text("• " + n).font(.subheadline) }
             Text("ඔයා දැන් පාවිච්චි කරන්නේ v\(UpdateChecker.currentVersion) (build \(UpdateChecker.currentBuild))").font(.caption).foregroundStyle(.secondary)
-            HStack {
-                Button { if let x = UpdateChecker.sideStoreURL(u) { openURL(x) } } label: { Label("SideStore", systemImage: "arrow.down.app") }.buttonStyle(.borderedProminent)
-                Button { if let x = UpdateChecker.altStoreURL(u) { openURL(x) } } label: { Text("AltStore") }.buttonStyle(.bordered)
-                Button { if let x = URL(string: u.ipa) { openURL(x) } } label: { Text(".ipa") }.buttonStyle(.bordered)
+            if UpdateChecker.installedWithSideStore {
+                Button { if let x = UpdateChecker.sideStoreURL(u) { openURL(x) } } label: {
+                    Label("Update කරන්න (SideStore)", systemImage: "arrow.down.app").frame(maxWidth: .infinity).padding(.vertical, 4)
+                }.buttonStyle(.borderedProminent)
+                HStack {
+                    Button { if let x = UpdateChecker.altStoreURL(u) { openURL(x) } } label: { Text("AltStore") }.buttonStyle(.bordered)
+                    Button { if let x = URL(string: u.ipa) { openURL(x) } } label: { Text(".ipa") }.buttonStyle(.bordered)
+                }
+                Text("LocalDevVPN එක ON කරලා, Wi-Fi එකේ ඉඳලා ඔබන්න. ඉගෙනගත් වචන, settings නැති වෙන්නේ නැහැ.").font(.caption).foregroundStyle(.secondary)
+            } else {
+                NavigationLink { NoLaptopGuide() } label: {
+                    Label("Laptop නැතුව update ගන්නේ කොහොමද?", systemImage: "iphone.and.arrow.forward").frame(maxWidth: .infinity).padding(.vertical, 4)
+                }.buttonStyle(.borderedProminent)
+                HStack {
+                    Button { if let x = UpdateChecker.sideStoreURL(u) { openURL(x) } } label: { Text("SideStore") }.buttonStyle(.bordered)
+                    Button { if let x = URL(string: u.ipa) { openURL(x) } } label: { Text(".ipa download") }.buttonStyle(.bordered)
+                }
+                Text("දැන් තියෙන්නේ 3uTools / Sideloadly වගේ PC tool එකකින් දාපු version එකක් නම්, මේ පාර .ipa එක PC එකෙන් දාන්න. එක පාරක් SideStore setup කළාම ඊළඟ updates ඔක්කොම phone එකෙන්ම.").font(.caption).foregroundStyle(.secondary)
             }
-            Text("SideStore / AltStore තියෙනවා නම් එක tap එකෙන් update වෙනවා. Sideloadly නම් .ipa එක download කරලා PC එකෙන් ආයේ දාන්න — settings, ඉගෙනගත් වචන නැති වෙන්නේ නැහැ.").font(.caption).foregroundStyle(.secondary)
         }
         .padding(14).frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.orange.opacity(0.12)))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.orange.opacity(0.5)))
+    }
+}
+
+/// Step-by-step: move from 3uTools/Sideloadly to SideStore once, then update and refresh from the phone.
+struct NoLaptopGuide: View {
+    @Environment(\.openURL) private var openURL
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("එක පාරක් විතරක් PC එකක් ඕන. ඊට පස්සේ Swift Akuru updates, 7 දවසේ refresh ඔක්කොම iPhone එකෙන්ම.").font(.subheadline)
+                StepCard(n: 1, title: "PC එකේ (එක පාරයි)", text: "Windows PC එකට iTunes (Apple site එකෙන්) සහ iloader install කරන්න (docs.sidestore.io). iPhone එක cable එකෙන් ගහලා, iloader එකේ ඔයාගේ Apple ID එකෙන් sign in වෙලා SideStore install කරන්න.")
+                Button { openURL(URL(string: "https://docs.sidestore.io/docs/installation/prerequisites")!) } label: { Label("SideStore install guide (docs.sidestore.io)", systemImage: "safari") }
+                StepCard(n: 2, title: "iPhone එකේ trust කරන්න", text: "Settings → General → VPN & Device Management → ඔයාගේ Apple ID → Trust. Settings → Privacy & Security → Developer Mode ON කරලා restart කරන්න.")
+                StepCard(n: 3, title: "LocalDevVPN දාගන්න", text: "App Store එකෙන් LocalDevVPN install කරලා Connect කරන්න. SideStore එකෙන් install/update/refresh කරන හැම වෙලාවෙම මේක ON වෙලා, Wi-Fi එකේ ඉන්න ඕන.")
+                Button { openURL(URL(string: "https://apps.apple.com/search?term=LocalDevVPN")!) } label: { Label("LocalDevVPN — App Store", systemImage: "lock.shield") }
+                StepCard(n: 4, title: "SideStore එකට Swift Akuru add කරන්න", text: "SideStore open කරලා Apple ID එකෙන් sign in වෙන්න. පහළ button එක ඔබලා Swift Akuru source එක add කරලා, එතනින් Swift Akuru install කරන්න.")
+                Button { if let x = UpdateChecker.sideStoreSourceURL { openURL(x) } } label: {
+                    Label("Swift Akuru source එක SideStore එකට add කරන්න", systemImage: "plus.app").frame(maxWidth: .infinity).padding(.vertical, 4)
+                }.buttonStyle(.borderedProminent)
+                StepCard(n: 5, title: "පරණ එක මකන්න", text: "SideStore එකෙන් දාපු Swift Akuru එක වැඩ කරනවා නම්, 3uTools එකෙන් දාපු පරණ Swift Akuru app එක delete කරලා, Settings → Keyboards එකේ අලුත් එක ON කරන්න. (පරණ install එකේ ඉගෙනගත් වචන අලුත් එකට එන්නේ නැහැ.)")
+                StepCard(n: 6, title: "ඊට පස්සේ", text: "Update එකක් ආවම Setup tab එකේ “Update කරන්න (SideStore)” ඔබන්න. 7 දවසකට සැරයක් SideStore → My Apps → Refresh (LocalDevVPN ON).")
+                Text("Free Apple ID එකක: එකවර active apps 3ක් (SideStore + Swift Akuru = 2), සතියකට App IDs 10ක් (Swift Akuru = 2: app + keyboard).").font(.caption).foregroundStyle(.secondary)
+            }.padding()
+        }.navigationTitle("Laptop නැතුව update")
     }
 }
 

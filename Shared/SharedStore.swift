@@ -11,11 +11,33 @@ final class SharedStore {
     let containerURL: URL
     let hasAppGroup: Bool
 
+    /// SideStore / AltStore re-sign the app with a free Apple ID and rename the App Group
+    /// (e.g. "group.store.swiftpaypos.swiftakuru.ABCDE12345"). They write the real names into
+    /// Info.plist as "ALTAppGroups", so look there first (in the app and, from the keyboard, in the host app).
+    static var groupCandidates: [String] {
+        var bundles = [Bundle.main]
+        let url = Bundle.main.bundleURL
+        if url.pathExtension == "appex", let host = Bundle(url: url.deletingLastPathComponent().deletingLastPathComponent()) { bundles.append(host) }
+        var out: [String] = []
+        for b in bundles {
+            for g in (b.object(forInfoDictionaryKey: "ALTAppGroups") as? [String]) ?? [] where !out.contains(g) { out.append(g) }
+        }
+        if !out.contains(appGroup) { out.append(appGroup) }
+        return out
+    }
+
+    private(set) var activeGroup: String?
+
     private init() {
-        if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup) {
+        let found = SharedStore.groupCandidates.lazy.compactMap { g in
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: g).map { (g, $0) }
+        }.first
+        if let f = found {
+            let group = f.0, url = f.1
             containerURL = url
             hasAppGroup = true
-            defaults = UserDefaults(suiteName: SharedStore.appGroup) ?? .standard
+            activeGroup = group
+            defaults = UserDefaults(suiteName: group) ?? .standard
         } else {
             let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? FileManager.default.temporaryDirectory
             containerURL = base.appendingPathComponent("SwiftAkuru", isDirectory: true)
@@ -23,12 +45,35 @@ final class SharedStore {
             defaults = .standard
         }
         try? FileManager.default.createDirectory(at: containerURL, withIntermediateDirectories: true)
+        if hasAppGroup { migrateLocalData() }
         defaults.register(defaults: [
             K.layout: "singlish", K.theme: "swift", K.sound: true, K.haptics: true, K.autoCap: true, K.autocorrect: true,
             K.doubleSpace: true, K.livePreview: true, K.keyHints: true, K.numberRow: false, K.aiProvider: "gemini",
             K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 50.0,
             K.emojiSuggest: true, K.learnWords: true,
         ])
+    }
+
+    /// When an update starts using the App Group (e.g. after moving to SideStore), carry over what was
+    /// saved locally before: learned words, clipboard, photo background and settings. Runs once.
+    private func migrateLocalData() {
+        let flag = "migratedLocal." + (Bundle.main.bundleIdentifier ?? "app")
+        guard !defaults.bool(forKey: flag) else { return }
+        let fm = FileManager.default
+        if let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?.appendingPathComponent("SwiftAkuru", isDirectory: true),
+           let files = try? fm.contentsOfDirectory(at: base, includingPropertiesForKeys: nil) {
+            for f in files {
+                let dest = containerURL.appendingPathComponent(f.lastPathComponent)
+                if !fm.fileExists(atPath: dest.path) { try? fm.copyItem(at: f, to: dest) }
+            }
+        }
+        let keys = [K.layout, K.theme, K.sound, K.haptics, K.autoCap, K.autocorrect, K.doubleSpace, K.livePreview, K.keyHints, K.numberRow,
+                    K.aiProvider, K.aiKeyGemini, K.aiKeyOpenAI, K.aiModelGemini, K.aiModelOpenAI, K.clipboardMax, K.keyHeight,
+                    K.shortcuts, K.emojiSuggest, K.learnWords, K.recentEmoji]
+        for k in keys where defaults.object(forKey: k) == nil {
+            if let v = UserDefaults.standard.object(forKey: k) { defaults.set(v, forKey: k) }
+        }
+        defaults.set(true, forKey: flag)
     }
 
     enum K {

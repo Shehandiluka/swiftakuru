@@ -16,6 +16,14 @@ enum UpdateChecker {
     static let altSource = "https://github.com/Shehandiluka/swiftakuru/releases/latest/download/altstore.json"
     static let releasesPage = URL(string: "https://github.com/Shehandiluka/swiftakuru/releases/latest")!
 
+    /// SideStore / AltStore add ALTDeviceID to Info.plist when they sign an app.
+    static var installedWithSideStore: Bool {
+        var bundles = [Bundle.main]
+        let url = Bundle.main.bundleURL
+        if url.pathExtension == "appex", let host = Bundle(url: url.deletingLastPathComponent().deletingLastPathComponent()) { bundles.append(host) }
+        return bundles.contains { $0.object(forInfoDictionaryKey: "ALTDeviceID") != nil }
+    }
+
     static var currentBuild: Int { Int((Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "0") ?? 0 }
     static var currentVersion: String { (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0" }
 
