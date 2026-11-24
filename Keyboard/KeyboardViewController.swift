@@ -749,7 +749,7 @@ final class KeyboardViewController: UIInputViewController {
         let text = d.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         translating = true
-        composeStrip?.show("⏳ \(lang.native) වලට translate කරනවා…", placeholder: "")
+        composeStrip?.status("⏳ \(lang.native) වලට translate කරනවා…")
         let context = translateContext
         Task { @MainActor [weak self] in
             do {
@@ -762,7 +762,7 @@ final class KeyboardViewController: UIInputViewController {
             } catch {
                 guard let self = self else { return }
                 self.translating = false
-                self.composeStrip?.show("⚠️ " + error.localizedDescription, placeholder: "")
+                self.composeStrip?.status("⚠️ " + error.localizedDescription)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
                     guard let self = self, let d = self.draft else { return }
                     self.composeStrip?.show(d.text, placeholder: "")

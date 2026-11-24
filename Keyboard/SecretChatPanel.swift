@@ -40,16 +40,24 @@ final class SecretComposeStrip: UIView {
     let cancel = UIButton(type: .system)
     var onSend: (() -> Void)?
     var onCancel: (() -> Void)?
+    private var textColor: UIColor = .white
 
     init(theme t: KBTheme, partner: String) {
         super.init(frame: .zero)
-        backgroundColor = t.key.withAlphaComponent(0.9)
+        // solid, high-contrast colours (never see-through), so what you type is always readable
+        overrideUserInterfaceStyle = t.dark ? .dark : .light
+        backgroundColor = t.dark ? UIColor(red: 0.13, green: 0.13, blue: 0.16, alpha: 1) : .white
         layer.cornerRadius = 10
-        label.font = .systemFont(ofSize: 15)
-        label.textColor = t.keyText
+        layer.borderWidth = 1.5
+        layer.borderColor = t.accent.cgColor
+        label.font = .systemFont(ofSize: 16, weight: .medium)
+        label.numberOfLines = 2
+        label.adjustsFontSizeToFitWidth = true
+        label.minimumScaleFactor = 0.75
+        textColor = t.dark ? .white : .black
+        label.textColor = textColor
         label.lineBreakMode = .byTruncatingHead
         label.text = "🔒 \(partner) ට reply…"
-        label.alpha = 0.6
         cancel.setImage(UIImage(systemName: "xmark.circle.fill"), for: .normal)
         cancel.tintColor = t.specialText
         send.setImage(UIImage(systemName: "arrow.up.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: 24)), for: .normal)
@@ -69,9 +77,10 @@ final class SecretComposeStrip: UIView {
     }
     required init?(coder: NSCoder) { fatalError() }
     func show(_ text: String, placeholder: String) {
-        label.text = text.isEmpty ? placeholder : text
-        label.alpha = text.isEmpty ? 0.6 : 1
+        label.text = text.isEmpty ? placeholder : text + "│"
+        label.textColor = text.isEmpty ? textColor.withAlphaComponent(0.55) : textColor
     }
+    func status(_ text: String) { label.text = text; label.textColor = textColor }
     @objc private func tapSend() { onSend?() }
     @objc private func tapCancel() { onCancel?() }
 }
