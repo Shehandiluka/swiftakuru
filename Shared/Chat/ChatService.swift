@@ -227,7 +227,9 @@ final class ChatService: ObservableObject {
                 delivered.append(msg.id)
             }
             if let last = r.messages.last { db.setValue(String(last.seq), "cursor.msg") }
-            if !delivered.isEmpty { try? await api.ack(delivered: delivered, read: []) }
+            for chunk in stride(from: 0, to: delivered.count, by: 20).map({ Array(delivered[$0..<min($0 + 20, delivered.count)]) }) {
+                try? await api.ack(delivered: chunk, read: [])
+            }
             for e in r.events { apply(e) }
             if let last = r.events.last { db.setValue(String(last.seq), "cursor.evt"); try? await api.ackEvents(upTo: last.seq) }
             if needsRefresh { await refreshConversations() }
@@ -266,7 +268,9 @@ final class ChatService: ObservableObject {
         guard !ids.isEmpty else { return }
         db.markReadByMe(ids: ids)
         bump()
-        try? await api.ack(delivered: [], read: ids)
+        for chunk in stride(from: 0, to: ids.count, by: 20).map({ Array(ids[$0..<min($0 + 20, ids.count)]) }) {
+            try? await api.ack(delivered: [], read: chunk)
+        }
     }
 
     // MARK: polling (no push notifications without a paid Apple developer account)
