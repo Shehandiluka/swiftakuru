@@ -66,14 +66,14 @@ final class SuggestionBar: UIView {
         onPick?(items[b.tag])
     }
 
-    func showToolbar(clipboard: Bool, update: Bool = false) {
+    func showToolbar(clipboard: Bool, update: Bool = false, secret: Bool = false) {
         clear()
         items = []
         stack.distribution = .fillEqually
         let tools: [(String, String?, String)] = [
             ("emoji", "face.smiling", ""), ("clipboard", clipboard ? "doc.on.clipboard.fill" : "doc.on.clipboard", ""), ("ai", "sparkles", ""),
             ("sinhala", nil, "අ"), ("settings", update ? "arrow.down.circle.fill" : "gearshape", ""), ("hide", "keyboard.chevron.compact.down", ""),
-        ]
+        ].flatMap { t -> [(String, String?, String)] in t.0 == "settings" && secret ? [("secret", "lock", ""), t] : [t] }
         for (id, sym, text) in tools {
             let b = UIButton(type: .system)
             if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)), for: .normal) } else {

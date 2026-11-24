@@ -29,10 +29,21 @@ final class KeyboardViewController: UIInputViewController {
     static let barHeight: CGFloat = 44
     var pendingUpdate: AppUpdate?
 
+    // MARK: Secret Chat state
+    /// While writing a Secret Chat reply the keys type into this buffer, never into the host app.
+    var draft: ChatDraftProxy?
+    /// The text proxy every typing path uses: the host app's field, or the Secret Chat draft.
+    var input: UITextDocumentProxy { draft ?? textDocumentProxy }
+    private var composeStrip: SecretComposeStrip?
+    private var draftConversation: String?
+    private var unlockedSecret: (id: String, at: Date)?
+    private var barTopC: NSLayoutConstraint!
+    static let composeHeight: CGFloat = 44
+
     /// Singlish is turned off automatically for e-mail / URL fields
     var singlish: Bool {
         guard store.layout == "singlish" else { return false }
-        let kt = textDocumentProxy.keyboardType ?? .default
+        let kt = input.keyboardType ?? .default
         return !(kt == .URL || kt == .emailAddress)
     }
     var live: Bool { store[bool: SharedStore.K.livePreview] }
@@ -62,11 +73,12 @@ final class KeyboardViewController: UIInputViewController {
         keys.onKey = { [weak self] s, e in self?.handle(s, e) }
         bar.onPick = { [weak self] s in self?.pickSuggestion(s) }
         bar.onTool = { [weak self] t in self?.tool(t) }
+        barTopC = bar.topAnchor.constraint(equalTo: view.topAnchor)
         NSLayoutConstraint.activate([
             bgImage.leadingAnchor.constraint(equalTo: view.leadingAnchor), bgImage.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bgImage.topAnchor.constraint(equalTo: view.topAnchor), bgImage.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             bar.leadingAnchor.constraint(equalTo: view.leadingAnchor), bar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            bar.topAnchor.constraint(equalTo: view.topAnchor), bar.heightAnchor.constraint(equalToConstant: Self.barHeight),
+            barTopC, bar.heightAnchor.constraint(equalToConstant: Self.barHeight),
             keys.leadingAnchor.constraint(equalTo: view.leadingAnchor), keys.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             keys.topAnchor.constraint(equalTo: bar.bottomAnchor),
             keys.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -3),
@@ -80,7 +92,7 @@ final class KeyboardViewController: UIInputViewController {
     /// iOS ignores a height constraint added before the keyboard is on screen (it then squeezes it to ~216 pt),
     /// so it is (re)applied here and in viewDidAppear.
     private func ensureHeight() {
-        let want = Self.barHeight + keyArea + 3
+        let want = Self.barHeight + keyArea + 3 + (draft != nil ? Self.composeHeight : 0)
         if heightC == nil {
             let h = view.heightAnchor.constraint(equalToConstant: want)
             h.priority = UILayoutPriority(999)
@@ -116,6 +128,9 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     override func viewWillDisappear(_ animated: Bool) {
+        if draft != nil { endSecretCompose(reopen: false) }
+        unlockedSecret = nil          // Secret Chat locks whenever the keyboard goes away
+        if panel is SecretChatPanel { closePanel() }
         commitComposition()
         WordStore.shared.save()
         super.viewWillDisappear(animated)
@@ -160,7 +175,7 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func returnLabel() -> String {
-        switch textDocumentProxy.returnKeyType ?? .default {
+        switch input.returnKeyType ?? .default {
         case .go: return "go"
         case .search, .google, .yahoo: return "search"
         case .send: return "send"
@@ -185,7 +200,7 @@ final class KeyboardViewController: UIInputViewController {
             typeAlt(a)
         case .cursor(let d):
             if !composing.isEmpty { commitComposition() }
-            textDocumentProxy.adjustTextPosition(byCharacterOffset: d)
+            input.adjustTextPosition(byCharacterOffset: d)
             if store[bool: SharedStore.K.haptics], hasFullAccess { UISelectionFeedbackGenerator().selectionChanged() }
         case .cursorEnd:
             stopDelete()
@@ -198,8 +213,9 @@ final class KeyboardViewController: UIInputViewController {
         case .char(let c): typeChar(c)
         case .space: space()
         case .ret:
+            if draft != nil { sendSecretDraft(); return }
             commitComposition()
-            textDocumentProxy.insertText("\n")
+            input.insertText("\n")
             previousWord = nil
             updateAutoCap(); refreshBar()
         case .backspace: stopDelete()
@@ -244,7 +260,7 @@ final class KeyboardViewController: UIInputViewController {
             let w = currentWord()
             if !w.isEmpty { WordStore.shared.learn(w, previous: previousWord); previousWord = w }
         }
-        textDocumentProxy.insertText(c)
+        input.insertText(c)
         if page == .letters { releaseShiftOnce() }
         if ".!?".contains(c) { previousWord = nil }
         updateAutoCap()
@@ -261,7 +277,7 @@ final class KeyboardViewController: UIInputViewController {
 
     private func typeCharDirect(_ s: String) {
         commitComposition()
-        textDocumentProxy.insertText(s)
+        input.insertText(s)
         releaseShiftOnce()
         refreshBar()
     }
@@ -278,7 +294,7 @@ final class KeyboardViewController: UIInputViewController {
     func commitComposition(word: String? = nil) {
         guard !composing.isEmpty else { return }
         let w = word ?? Singlish.convert(composing)
-        if live { replaceTail(old: composedShown, with: w) } else { textDocumentProxy.insertText(w) }
+        if live { replaceTail(old: composedShown, with: w) } else { input.insertText(w) }
         WordStore.shared.learn(w, roman: composing, previous: previousWord)
         previousWord = w
         composing = ""
@@ -299,7 +315,7 @@ final class KeyboardViewController: UIInputViewController {
     /// Replaces `old` (which is right before the cursor) with `new`, touching only the part that changed.
     private func replaceTail(old: String, with new: String) {
         guard old != new else { return }
-        let proxy = textDocumentProxy
+        let proxy = input
         let oldS = Array(old.unicodeScalars), newS = Array(new.unicodeScalars)
         var common = 0
         while common < oldS.count, common < newS.count, oldS[common] == newS[common] { common += 1 }
@@ -342,11 +358,11 @@ final class KeyboardViewController: UIInputViewController {
         if !composing.isEmpty {
             if let exp = shortcuts[composing] {
                 cancelComposition()
-                textDocumentProxy.insertText(exp + " ")
+                input.insertText(exp + " ")
             } else {
                 let roman = composing
                 commitComposition()
-                textDocumentProxy.insertText(" ")
+                input.insertText(" ")
                 bar.lastEmoji = store[bool: SharedStore.K.emojiSuggest] ? EmojiData.suggestions(for: roman) + EmojiData.suggestions(for: previousWord ?? "") : []
             }
             lastSpaceTime = Date()
@@ -355,16 +371,16 @@ final class KeyboardViewController: UIInputViewController {
         }
         let word = currentWord()
         if !word.isEmpty, let exp = shortcuts[word] {
-            for _ in 0..<word.count { textDocumentProxy.deleteBackward() }
-            textDocumentProxy.insertText(exp + " ")
+            for _ in 0..<word.count { input.deleteBackward() }
+            input.insertText(exp + " ")
             refreshBar(); return
         }
         // double space → ". "
         if store[bool: SharedStore.K.doubleSpace], let t = lastSpaceTime, Date().timeIntervalSince(t) < 0.9 {
-            let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
+            let ctx = input.documentContextBeforeInput ?? ""
             if ctx.hasSuffix(" "), let prev = ctx.dropLast().last, prev.isLetter || prev.isNumber || Singlish.isSinhala(String(prev)) {
-                textDocumentProxy.deleteBackward()
-                textDocumentProxy.insertText(". ")
+                input.deleteBackward()
+                input.insertText(". ")
                 lastSpaceTime = nil
                 previousWord = nil
                 updateAutoCap(); refreshBar()
@@ -372,7 +388,7 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
         var finalWord = word
-        if !singlish, store[bool: SharedStore.K.autocorrect], (textDocumentProxy.autocorrectionType ?? .default) != .no, word.count >= 2, word.allSatisfy({ $0.isLetter || $0 == "'" }) {
+        if !singlish, store[bool: SharedStore.K.autocorrect], (input.autocorrectionType ?? .default) != .no, word.count >= 2, word.allSatisfy({ $0.isLetter || $0 == "'" }) {
             let (_, corr) = WordStore.shared.englishSuggestions(partial: word)
             if let c = corr, c.lowercased() != word.lowercased() {
                 replaceCurrentWord(word, with: c)
@@ -381,7 +397,7 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
         if !finalWord.isEmpty { WordStore.shared.learn(finalWord, previous: previousWord); previousWord = finalWord }
-        textDocumentProxy.insertText(" ")
+        input.insertText(" ")
         lastSpaceTime = Date()
         bar.lastEmoji = store[bool: SharedStore.K.emojiSuggest] ? EmojiData.suggestions(for: finalWord) : []
         updateAutoCap()
@@ -389,13 +405,13 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func replaceCurrentWord(_ word: String, with new: String) {
-        for _ in 0..<word.count { textDocumentProxy.deleteBackward() }
-        textDocumentProxy.insertText(new)
+        for _ in 0..<word.count { input.deleteBackward() }
+        input.insertText(new)
     }
 
     /// letters right before the cursor (English / already committed text)
     func currentWord() -> String {
-        let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
+        let ctx = input.documentContextBeforeInput ?? ""
         var w = ""
         for ch in ctx.reversed() {
             if ch.isLetter || ch.isNumber || ch == "'" || ch == "@" || ch == "\u{0DCA}" || ch == "\u{200D}" || Singlish.isSinhala(String(ch)) { w.insert(ch, at: w.startIndex) } else { break }
@@ -405,9 +421,9 @@ final class KeyboardViewController: UIInputViewController {
 
     // MARK: delete
     private func backspaceDown() {
-        if let ac = autocorrected, (textDocumentProxy.documentContextBeforeInput ?? "").hasSuffix(ac.replacement + " ") {
-            for _ in 0..<(ac.replacement.count + 1) { textDocumentProxy.deleteBackward() }
-            textDocumentProxy.insertText(ac.original)
+        if let ac = autocorrected, (input.documentContextBeforeInput ?? "").hasSuffix(ac.replacement + " ") {
+            for _ in 0..<(ac.replacement.count + 1) { input.deleteBackward() }
+            input.insertText(ac.original)
             WordStore.shared.learn(ac.original, previous: nil) // never correct this word again
             WordStore.shared.learn(ac.original, previous: nil)
             autocorrected = nil
@@ -439,32 +455,32 @@ final class KeyboardViewController: UIInputViewController {
             if composing.isEmpty { cancelComposition(); refreshBar() } else { updateComposition() }
             return
         }
-        textDocumentProxy.deleteBackward()
+        input.deleteBackward()
         updateAutoCap()
         refreshBar()
     }
 
     private func deleteWord() {
         if !composing.isEmpty { cancelComposition(); refreshBar(); return }
-        let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
+        let ctx = input.documentContextBeforeInput ?? ""
         var n = 0
         var seenWord = false
         for ch in ctx.reversed() {
             if ch == " " || ch == "\n" { if seenWord { break } } else { seenWord = true }
             n += 1
         }
-        for _ in 0..<max(1, n) { textDocumentProxy.deleteBackward() }
+        for _ in 0..<max(1, n) { input.deleteBackward() }
         refreshBar()
     }
 
     // MARK: auto-capitalization
     func updateAutoCap() {
         guard page == .letters, !singlish, shift != 2 else { return }
-        guard store[bool: SharedStore.K.autoCap], (textDocumentProxy.autocapitalizationType ?? .sentences) != .none else {
+        guard store[bool: SharedStore.K.autoCap], (input.autocapitalizationType ?? .sentences) != .none else {
             if shift == 1 { shift = 0; rebuildKeys() }
             return
         }
-        let ctx = textDocumentProxy.documentContextBeforeInput ?? ""
+        let ctx = input.documentContextBeforeInput ?? ""
         let trimmed = ctx.trimmingCharacters(in: .whitespaces)
         let want = ctx.isEmpty || ctx.hasSuffix("\n") || ((trimmed.hasSuffix(".") || trimmed.hasSuffix("!") || trimmed.hasSuffix("?")) && ctx.hasSuffix(" "))
         let newShift = want ? 1 : 0
@@ -498,29 +514,30 @@ final class KeyboardViewController: UIInputViewController {
             let emo = Array(bar.lastEmoji.prefix(3))
             if !next.isEmpty || !emo.isEmpty { bar.showSuggestions(next + emo, primary: -1); return }
         }
-        bar.showToolbar(clipboard: hasFullAccess && !ClipboardStore.shared.items.isEmpty, update: pendingUpdate != nil)
+        bar.showToolbar(clipboard: hasFullAccess && !ClipboardStore.shared.items.isEmpty, update: pendingUpdate != nil,
+                        secret: hasFullAccess && ChatService.shared.isSignedIn && draft == nil)
     }
 
     private func pickSuggestion(_ s: String) {
         feedbackTick()
         let isEmoji = s.unicodeScalars.first.map { $0.properties.isEmojiPresentation || $0.properties.isEmoji && $0.value > 0x2000 } ?? false
         if !composing.isEmpty {
-            if isEmoji { commitComposition(); textDocumentProxy.insertText(" " + s); refreshBar(); return }
+            if isEmoji { commitComposition(); input.insertText(" " + s); refreshBar(); return }
             commitComposition(word: s)
-            textDocumentProxy.insertText(" ")
+            input.insertText(" ")
             lastSpaceTime = Date()
             bar.lastEmoji = []
             refreshBar()
             return
         }
-        if isEmoji { textDocumentProxy.insertText(s); bar.lastEmoji = []; refreshBar(); return }
+        if isEmoji { input.insertText(s); bar.lastEmoji = []; refreshBar(); return }
         let w = currentWord()
         if !w.isEmpty, !singlish {
             replaceCurrentWord(w, with: s)
         } else {
-            textDocumentProxy.insertText(s)
+            input.insertText(s)
         }
-        textDocumentProxy.insertText(" ")
+        input.insertText(" ")
         WordStore.shared.learn(s, previous: previousWord)
         previousWord = s
         lastSpaceTime = Date()
@@ -537,6 +554,7 @@ final class KeyboardViewController: UIInputViewController {
         case "ai": showPanel(AIPanel(kb: self))
         case "settings": showPanel(SettingsPanel(kb: self))
         case "sinhala": commitComposition(); page = page.isSinhala ? .letters : .sinhala1; rebuildKeys()
+        case "secret": openSecretChat()
         case "hide": dismissKeyboard()
         default: break
         }
@@ -563,11 +581,13 @@ final class KeyboardViewController: UIInputViewController {
         case is ClipboardPanel: return "Clipboard"
         case is AIPanel: return "✨ Swift AI"
         case is SettingsPanel: return "Settings"
+        case is SecretChatPanel: return "🔒 Secret Chat"
         default: return ""
         }
     }
 
     func closePanel() {
+        if panel is SecretChatPanel { unlockedSecret = nil }
         panel?.removeFromSuperview()
         panel = nil
         panelHost.isHidden = true
@@ -577,7 +597,7 @@ final class KeyboardViewController: UIInputViewController {
 
     func insertFromPanel(_ s: String) {
         commitComposition()
-        textDocumentProxy.insertText(s)
+        input.insertText(s)
     }
 
     // MARK: feedback
@@ -598,6 +618,7 @@ final class KeyboardViewController: UIInputViewController {
         let docId = textDocumentProxy.documentIdentifier
         if docId != lastDocumentId {
             lastDocumentId = docId
+            if draft != nil { endSecretCompose(reopen: false) }
             composing = ""; composedShown = ""; previousWord = nil
             let kt = textDocumentProxy.keyboardType ?? .default
             if ([.numberPad, .decimalPad, .phonePad, .asciiCapableNumberPad] as [UIKeyboardType]).contains(kt) { page = .numbers } else if page == .numbers { page = .letters }
@@ -608,10 +629,75 @@ final class KeyboardViewController: UIInputViewController {
             let shown = composedShown
             DispatchQueue.main.async { [weak self] in
                 guard let self = self, !self.composing.isEmpty, self.composedShown == shown else { return }
-                if !(self.textDocumentProxy.documentContextBeforeInput ?? "").hasSuffix(shown) { self.composing = ""; self.composedShown = ""; self.refreshBar() }
+                if !(self.input.documentContextBeforeInput ?? "").hasSuffix(shown) { self.composing = ""; self.composedShown = ""; self.refreshBar() }
             }
         }
         if hasFullAccess, ClipboardStore.shared.capture() { if composing.isEmpty { refreshBar() } }
         updateAutoCap()
+    }
+
+    // MARK: Secret Chat
+    private func openSecretChat() {
+        commitComposition()
+        var unlocked: String?
+        if let u = unlockedSecret, Date().timeIntervalSince(u.at) < 120 { unlocked = u.id } else { unlockedSecret = nil }
+        showPanel(SecretChatPanel(kb: self, unlockedConversation: unlocked))
+    }
+
+    func secretUnlocked(conversationId: String) { unlockedSecret = (conversationId, Date()) }
+
+    func lockSecretChat() {
+        unlockedSecret = nil
+        closePanel()
+    }
+
+    func beginSecretCompose(conversationId: String, partner: String) {
+        commitComposition()
+        unlockedSecret = (conversationId, Date())
+        panel?.removeFromSuperview(); panel = nil
+        panelHost.isHidden = true; keys.isHidden = false
+        let d = ChatDraftProxy()
+        draft = d
+        draftConversation = conversationId
+        let strip = SecretComposeStrip(theme: theme, partner: partner)
+        let placeholder = "🔒 \(partner) ට reply…"
+        d.onChange = { [weak strip] t in strip?.show(t, placeholder: placeholder) }
+        strip.onSend = { [weak self] in self?.sendSecretDraft() }
+        strip.onCancel = { [weak self] in self?.endSecretCompose(reopen: true) }
+        strip.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(strip)
+        NSLayoutConstraint.activate([strip.topAnchor.constraint(equalTo: view.topAnchor, constant: 4),
+                                     strip.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 6),
+                                     strip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -6),
+                                     strip.heightAnchor.constraint(equalToConstant: Self.composeHeight - 6)])
+        composeStrip = strip
+        barTopC.constant = Self.composeHeight
+        page = .letters; shift = 0
+        ensureHeight(); rebuildKeys(); updateAutoCap(); refreshBar()
+    }
+
+    private func sendSecretDraft() {
+        guard let d = draft, let cid = draftConversation else { return }
+        commitComposition()
+        let text = d.text
+        endSecretCompose(reopen: true)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        Task { @MainActor [weak self] in
+            await ChatService.shared.send(text, in: cid)
+            (self?.panel as? SecretChatPanel)?.applyTheme(self?.theme ?? KBTheme.named("swift"))
+        }
+    }
+
+    /// Leaves compose mode. The draft is discarded (never inserted into the host app).
+    func endSecretCompose(reopen: Bool) {
+        composing = ""; composedShown = ""
+        draft?.clear()
+        draft = nil
+        composeStrip?.removeFromSuperview(); composeStrip = nil
+        barTopC.constant = 0
+        let cid = draftConversation
+        draftConversation = nil
+        ensureHeight(); rebuildKeys(); updateAutoCap(); refreshBar()
+        if reopen, let c = cid { unlockedSecret = (c, Date()); showPanel(SecretChatPanel(kb: self, unlockedConversation: c)) }
     }
 }

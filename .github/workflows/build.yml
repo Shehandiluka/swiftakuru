@@ -21,6 +21,13 @@ jobs:
         run: sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)" && xcodebuild -version
       - name: Generate project
         run: xcodegen generate
+      - name: Unit tests (iOS Simulator)
+        run: |
+          SIM=$(xcrun simctl list devices available | grep -Eo 'iPhone 1[5-9][^(]*\(([0-9A-F-]{36})\)' | head -1 | grep -Eo '[0-9A-F-]{36}')
+          echo "Simulator: $SIM"
+          set -o pipefail
+          xcodebuild test -project SwiftAkuru.xcodeproj -scheme SwiftAkuruTests -destination "id=$SIM" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee test.log | grep -E "Test Case .*(passed|failed)|error:|Executed|TEST (SUCCEEDED|FAILED)" || (tail -60 test.log; exit 1)
       - name: Build (unsigned)
         run: |
           xcodebuild -project SwiftAkuru.xcodeproj -scheme SwiftAkuru -configuration Release -sdk iphoneos \
@@ -62,7 +69,7 @@ jobs:
                            "subtitle": "Singlish → සිංහල keyboard with AI", "localizedDescription": "Sinhala (Singlish) keyboard with smart suggestions, AI translate, grammar fix, clipboard history, emoji and themes.",
                            "iconURL": icon, "tintColor": "3B6CFF", "category": "utilities",
                            "versions": [{"version": ver, "buildVersion": run, "date": now, "localizedDescription": "\n".join(notes), "downloadURL": ipa, "size": size, "minOSVersion": "16.0"}],
-                           "appPermissions": {"entitlements": ["com.apple.security.application-groups"], "privacy": {"NSPhotoLibraryUsageDescription": "Keyboard background එකට photo එකක් තෝරන්න."}}}],
+                           "appPermissions": {"entitlements": ["com.apple.security.application-groups"], "privacy": {"NSPhotoLibraryUsageDescription": "Keyboard background එකට photo එකක් තෝරන්න.", "NSFaceIDUsageDescription": "Secret Chats Face ID එකෙන් විවෘත කරන්න."}}}],
                  "news": []}
           json.dump(src, open("altstore.json", "w"), ensure_ascii=False, indent=1)
           print(open("update.json").read())
@@ -78,4 +85,6 @@ jobs:
         if: failure()
         with:
           name: xcodebuild-log
-          path: xcodebuild.log
+          path: |
+            xcodebuild.log
+            test.log

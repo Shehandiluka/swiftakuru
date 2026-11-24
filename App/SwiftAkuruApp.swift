@@ -13,6 +13,7 @@ struct RootView: View {
         TabView {
             HomeView().tabItem { Label("Setup", systemImage: "keyboard") }
             GuideView().tabItem { Label("Singlish", systemImage: "character.book.closed") }
+            ChatRootView().tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
             AISettingsView().tabItem { Label("AI", systemImage: "sparkles") }
             ThemesView().tabItem { Label("Themes", systemImage: "paintpalette") }
             MoreView().tabItem { Label("More", systemImage: "ellipsis.circle") }
