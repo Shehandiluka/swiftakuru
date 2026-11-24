@@ -80,11 +80,48 @@ final class KeyboardView: UIView {
     private var altIndex = 0
     var shiftState = 0 // 0 off, 1 on, 2 lock
 
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isMultipleTouchEnabled = true
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    /// Keys whose finger is still down, in the order they were pressed (fast "rolling" typing).
+    private var held: [KeyButton] = []
+    /// Keys already typed early because the next key was pressed first; their own touch-up is ignored.
+    private var consumed = Set<ObjectIdentifier>()
+
     func setRows(_ specs: [[KeySpec]]) {
+        // Same shape (e.g. shift / auto-capital changed): keep the existing key views and only swap
+        // what they type. Replacing them would drop a finger that is already down on a key.
+        if rows.count == specs.count, zip(rows, specs).allSatisfy({ $0.count == $1.count && zip($0, $1).allSatisfy { sameKind($0.spec.kind, $1.kind) } }) {
+            for (r, row) in specs.enumerated() { for (i, sp) in row.enumerated() { update(rows[r][i], to: sp) } }
+            setNeedsLayout()
+            refreshStyle()
+            return
+        }
         rows.flatMap { $0 }.forEach { $0.removeFromSuperview() }
+        held.removeAll(); consumed.removeAll()
         rows = specs.map { row in row.map { makeKey($0) } }
         setNeedsLayout()
         refreshStyle()
+    }
+
+    private func sameKind(_ a: KeyKind, _ b: KeyKind) -> Bool {
+        switch (a, b) {
+        case (.char, .char): return true
+        default: return a == b
+        }
+    }
+
+    private func update(_ b: KeyButton, to s: KeySpec) {
+        let hadAlts = !b.spec.alts.isEmpty
+        b.spec = s
+        b.accessibilityLabel = s.label
+        if hadAlts != !s.alts.isEmpty {
+            b.gestureRecognizers?.filter { $0 is UILongPressGestureRecognizer }.forEach { b.removeGestureRecognizer($0) }
+            if !s.alts.isEmpty { addLongPress(b) }
+        }
     }
 
     private func makeKey(_ s: KeySpec) -> KeyButton {
@@ -93,17 +130,29 @@ final class KeyboardView: UIView {
         addSubview(b)
         b.addTarget(self, action: #selector(down(_:)), for: .touchDown)
         b.addTarget(self, action: #selector(up(_:)), for: .touchUpInside)
-        b.addTarget(self, action: #selector(cancel(_:)), for: [.touchUpOutside, .touchCancel, .touchDragExit])
-        if !s.alts.isEmpty {
-            let lp = UILongPressGestureRecognizer(target: self, action: #selector(longPress(_:)))
-            lp.minimumPressDuration = 0.33
-            b.addGestureRecognizer(lp)
-        }
+        b.addTarget(self, action: #selector(cancel(_:)), for: [.touchUpOutside, .touchCancel])
+        if !s.alts.isEmpty { addLongPress(b) }
         if case .space = s.kind {
             let pan = UIPanGestureRecognizer(target: self, action: #selector(spacePan(_:)))
+            pan.delegate = self
             b.addGestureRecognizer(pan)
         }
         return b
+    }
+
+    private func addLongPress(_ b: KeyButton) {
+        let lp = UILongPressGestureRecognizer(target: self, action: #selector(longPress(_:)))
+        lp.minimumPressDuration = 0.4
+        lp.cancelsTouchesInView = true
+        b.addGestureRecognizer(lp)
+    }
+
+    /// Keys that type something on release and can be "rolled" over by the next key.
+    private func isTyping(_ b: KeyButton) -> Bool {
+        switch b.spec.kind {
+        case .char, .space: return true
+        default: return false
+        }
     }
 
     func refreshStyle() {
@@ -156,6 +205,18 @@ final class KeyboardView: UIView {
 
     // MARK: touches
     @objc private func down(_ b: KeyButton) {
+        // Fast typing: the next key went down before the last one came up — type the earlier one now,
+        // in order, exactly like the system keyboard. Nothing is lost and nothing is swapped.
+        if altView == nil, !panning {
+            for h in held where h !== b && isTyping(h) && !consumed.contains(ObjectIdentifier(h)) {
+                consumed.insert(ObjectIdentifier(h))
+                h.animatePress(false)
+                h.apply(theme: theme)
+                onKey?(h.spec, .up)
+            }
+        }
+        held.removeAll { $0 === b }
+        held.append(b)
         b.apply(theme: theme, highlighted: true, active: b.spec.kind == .shift && shiftState > 0)
         b.animatePress(true)
         // no letter pop-up preview — the key itself darkens and shrinks a little instead
@@ -163,11 +224,15 @@ final class KeyboardView: UIView {
     }
     @objc private func up(_ b: KeyButton) {
         hideBubble()
+        held.removeAll { $0 === b }
         b.animatePress(false)
         b.apply(theme: theme, active: b.spec.kind == .shift && shiftState > 0)
+        if consumed.remove(ObjectIdentifier(b)) != nil { return }   // already typed by the next key press
         onKey?(b.spec, .up)
     }
     @objc private func cancel(_ b: KeyButton) {
+        held.removeAll { $0 === b }
+        consumed.remove(ObjectIdentifier(b))
         hideBubble()
         b.animatePress(false)
         b.apply(theme: theme, active: b.spec.kind == .shift && shiftState > 0)
@@ -195,6 +260,7 @@ final class KeyboardView: UIView {
 
     @objc private func longPress(_ g: UILongPressGestureRecognizer) {
         guard let b = g.view as? KeyButton, let ov = overlay else { return }
+        if altView == nil, consumed.contains(ObjectIdentifier(b)) { return }   // already typed by a faster key press
         switch g.state {
         case .began:
             hideBubble()
@@ -268,5 +334,14 @@ final class KeyboardView: UIView {
             b.apply(theme: theme)
             onKey?(b.spec, .cursorEnd)
         }
+    }
+}
+
+extension KeyboardView: UIGestureRecognizerDelegate {
+    /// The space-bar cursor drag starts only after a clear sideways slide, so a quick space tap is never eaten.
+    func gestureRecognizerShouldBegin(_ g: UIGestureRecognizer) -> Bool {
+        guard let pan = g as? UIPanGestureRecognizer else { return true }
+        let t = pan.translation(in: self)
+        return abs(t.x) > 12 && abs(t.x) > abs(t.y) * 1.5
     }
 }
