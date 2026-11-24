@@ -519,7 +519,7 @@ final class KeyboardViewController: UIInputViewController {
             if !next.isEmpty || !emo.isEmpty { bar.showSuggestions(next + emo, primary: -1); return }
         }
         bar.showToolbar(clipboard: hasFullAccess && (!ClipboardStore.shared.items.isEmpty || ClipboardStore.shared.pending), update: pendingUpdate != nil,
-                        secret: hasFullAccess && ChatService.shared.isSignedIn && draft == nil)
+                        secret: hasFullAccess && ChatService.signedInHint && draft == nil)
     }
 
     private func pickSuggestion(_ s: String) {

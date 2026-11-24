@@ -16,7 +16,12 @@ struct ChatAccount: Codable, Equatable {
 final class ChatService: ObservableObject {
     static let shared = ChatService()
 
-    @Published private(set) var account: ChatAccount?
+    @Published private(set) var account: ChatAccount? {
+        didSet { SharedStore.shared.defaults.set(account != nil, forKey: ChatService.signedInFlag) }
+    }
+    /// Cheap "is someone signed in" flag the keyboard reads at launch without opening the chat database.
+    nonisolated static let signedInFlag = "chatSignedIn"
+    nonisolated static var signedInHint: Bool { SharedStore.shared.defaults.bool(forKey: signedInFlag) }
     @Published private(set) var me: ChatAPI.Me?
     @Published private(set) var revision = 0          // bumps when local data changes (UI refresh)
     @Published var lastError: String?
@@ -39,6 +44,7 @@ final class ChatService: ObservableObject {
     init(db: ChatDB = .shared) {
         self.db = db
         account = SecureStore.codable(ChatAccount.self, SecureStore.Keys.account)
+        SharedStore.shared.defaults.set(account != nil, forKey: ChatService.signedInFlag)
     }
 
     var isSignedIn: Bool { account != nil && SecureStore.string(SecureStore.Keys.session) != nil }

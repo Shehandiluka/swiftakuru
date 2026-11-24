@@ -84,7 +84,10 @@ final class ChatDB {
         self.url = url
         if sqlite3_open_v2(url.path, &db, SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, nil) != SQLITE_OK { db = nil }
         try? FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: url.path)
-        exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;")
+        // Rollback journal, not WAL: the database lives in the shared App Group folder and the keyboard
+        // can be suspended at any moment; WAL keeps file locks open, which makes iOS kill the extension
+        // (blank keyboard). A short busy timeout keeps the main thread from waiting on the app.
+        exec("PRAGMA journal_mode=DELETE; PRAGMA busy_timeout=800;")
         exec("""
         CREATE TABLE IF NOT EXISTS conversations (id TEXT PRIMARY KEY, partner_id TEXT NOT NULL, partner_name TEXT NOT NULL,
           partner_key TEXT NOT NULL, partner_key_version INTEGER NOT NULL, pinned_key TEXT NOT NULL DEFAULT '', secret INTEGER NOT NULL DEFAULT 0,
