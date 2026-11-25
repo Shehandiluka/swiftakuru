@@ -96,6 +96,10 @@ final class KeyboardViewController: UIInputViewController {
         ])
         panelHost.isHidden = true
         applySettings()
+        // Give iOS the keyboard height right away (not only when it appears): a missing height at first layout
+        // is a known cause of third-party keyboards showing up blank.
+        (inputView as? UIInputView)?.allowsSelfSizing = true
+        ensureHeight()
         KBDiag.mark("loaded")
     }
 
