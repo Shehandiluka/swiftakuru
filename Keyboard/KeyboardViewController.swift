@@ -139,6 +139,7 @@ final class KeyboardViewController: UIInputViewController {
         updateAutoCap()
         refreshBar()
         WordStore.shared.reloadIfChanged()
+        store.defaults.set(hasFullAccess, forKey: "kb.fullAccess")   // the app shows setup help only while needed
         updateSeason()
         pendingUpdate = UpdateChecker.cached()
         if hasFullAccess {

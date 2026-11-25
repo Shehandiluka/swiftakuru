@@ -27,61 +27,6 @@ struct RootView: View {
     }
 }
 
-// MARK: - Setup
-struct HomeView: View {
-    @State private var test = ""
-    @State private var update: AppUpdate? = UpdateChecker.cached()
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if let u = update { UpdateCard(u: u) }
-                    else if !UpdateChecker.installedWithSideStore {
-                        NavigationLink { NoLaptopGuide() } label: {
-                            Label("ඊළඟ updates laptop නැතුව ගන්න — setup", systemImage: "iphone.and.arrow.forward").frame(maxWidth: .infinity, alignment: .leading)
-                        }.buttonStyle(.bordered)
-                    }
-                    HStack(spacing: 14) {
-                        Image("Logo").resizable().frame(width: 64, height: 64).clipShape(RoundedRectangle(cornerRadius: 16))
-                        VStack(alignment: .leading) {
-                            Text("Swift Akuru").font(.largeTitle.bold())
-                            Text("සිංහල + English keyboard · AI සමඟ").foregroundStyle(.secondary)
-                        }
-                    }
-                    NavigationLink {
-                        TranslateView(input: .none).navigationTitle("🌐 Translate & Reply")
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "character.bubble.fill").font(.title2)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Translate & Reply").font(.headline)
-                                Text("ඕනම භාෂාවක message / voice → සිංහල, reply එක → ඒ භාෂාවට").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundStyle(.secondary)
-                        }.padding(14).background(swiftPurple.opacity(0.18)).clipShape(RoundedRectangle(cornerRadius: 14))
-                    }.buttonStyle(.plain)
-                    StepCard(n: 1, title: "Keyboard එක ON කරන්න", text: "පහළ button එක ඔබලා Settings → Keyboards → Swift Akuru ON කරන්න.")
-                    StepCard(n: 2, title: "Allow Full Access ON කරන්න", text: "Clipboard, AI, sound/vibration වලට මේක ඕන. ඔයා type කරන දේවල් අපි save කරන්නේවත් යවන්නේවත් නැහැ (AI එකට යවන්නේ ඔයා ✨ ඔබපු text එක විතරයි).")
-                    Button {
-                        if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) }
-                    } label: {
-                        Label("Settings open කරන්න", systemImage: "gear").frame(maxWidth: .infinity).padding(.vertical, 6)
-                    }.buttonStyle(.borderedProminent)
-                    StepCard(n: 3, title: "🌐 globe එක ඔබලා Swift Akuru තෝරන්න", text: "ඕනෑම app එකක keyboard එකේ 🌐 key එක ඔබාගෙන ඉඳලා Swift Akuru තෝරන්න.")
-                    Text("Test කරන්න").font(.headline)
-                    TextField("මෙතන type කරලා බලන්න… (amma → අම්ම)", text: $test, axis: .vertical)
-                        .lineLimit(3...6).padding(12).background(.thinMaterial).clipShape(RoundedRectangle(cornerRadius: 12))
-                    FeatureList()
-                }.padding()
-            }
-            .navigationTitle("").navigationBarHidden(true)
-            .task { update = await UpdateChecker.check(force: true) }
-            .refreshable { update = await UpdateChecker.check(force: true) }
-        }
-    }
-}
-
 /// "New version" card. Installed through SideStore/AltStore → one tap. Otherwise (3uTools, Sideloadly…) →
 /// download the .ipa, plus a guide to move to SideStore once so future updates need no laptop.
 struct UpdateCard: View {

@@ -985,6 +985,7 @@ struct SettingsTab: View {
                     }
                 }
                 Section("Keyboard") {
+                    NavigationLink { AccountView() } label: { Label("Swift Akuru account (Google)", systemImage: "person.crop.circle") }
                     NavigationLink { GuideView() } label: { Label("Singlish guide", systemImage: "character.book.closed") }
                     NavigationLink { ThemesView() } label: { Label("Themes", systemImage: "paintpalette") }
                     NavigationLink { AISettingsView() } label: { Label("Swift AI", systemImage: "sparkles") }
