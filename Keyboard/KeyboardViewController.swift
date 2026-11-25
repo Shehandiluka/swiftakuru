@@ -143,6 +143,7 @@ final class KeyboardViewController: UIInputViewController {
         updateAutoCap()
         refreshBar()
         WordStore.shared.reloadIfChanged()
+        updatePrivacy()
         store.defaults.set(hasFullAccess, forKey: "kb.fullAccess")   // the app shows setup help only while needed
         updateSeason()
         pendingUpdate = UpdateChecker.cached()
@@ -432,7 +433,7 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
         var finalWord = word
-        if !singlish, store[bool: SharedStore.K.autocorrect], (input.autocorrectionType ?? .default) != .no, word.count >= 2, word.allSatisfy({ $0.isLetter || $0 == "'" }) {
+        if !singlish, !WordStore.paused, store[bool: SharedStore.K.autocorrect], (input.autocorrectionType ?? .default) != .no, word.count >= 2, word.allSatisfy({ $0.isLetter || $0 == "'" }) {
             let (_, corr) = WordStore.shared.englishSuggestions(partial: word)
             if let c = corr, c.lowercased() != word.lowercased() {
                 replaceCurrentWord(word, with: c)
@@ -545,7 +546,7 @@ final class KeyboardViewController: UIInputViewController {
         }
         if !singlish, page == .letters {
             let w = currentWord()
-            if !w.isEmpty, !Singlish.isSinhala(w) {
+            if !w.isEmpty, !Singlish.isSinhala(w), !WordStore.paused {   // no suggestions in private fields
                 let (list, corr) = WordStore.shared.englishSuggestions(partial: w)
                 var items = corr == nil ? WordStore.shared.rankByContext(list, context: contextWords()) : list
                 if store[bool: SharedStore.K.emojiSuggest] { items += EmojiData.suggestions(for: w).prefix(2) }
@@ -632,6 +633,22 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
     }
+
+    // MARK: privacy
+    /// Password, one-time-code, card, email, URL, phone and number fields: no learning, no suggestions, no AI shortcuts.
+    /// (iOS itself never shows third-party keyboards in password fields; this also covers fields apps mark less strictly.)
+    var sensitiveField: Bool {
+        let p = textDocumentProxy
+        if p.isSecureTextEntry == true { return true }
+        if let kt = p.keyboardType, [.numberPad, .phonePad, .decimalPad, .asciiCapableNumberPad, .emailAddress, .URL, .namePhonePad].contains(kt) { return true }
+        if let ct = p.textContentType ?? nil {
+            let raw = ct.rawValue.lowercased()
+            if [UITextContentType.password, .newPassword, .oneTimeCode, .creditCardNumber, .username, .emailAddress, .telephoneNumber, .URL].contains(ct)
+                || raw.contains("creditcard") || raw.contains("password") { return true }
+        }
+        return false
+    }
+    private func updatePrivacy() { WordStore.paused = sensitiveField }
 
     /// The last (up to 3) finished words before the cursor — the context the language model predicts from.
     func contextWords() -> [String] {
@@ -736,6 +753,7 @@ final class KeyboardViewController: UIInputViewController {
         let docId = textDocumentProxy.documentIdentifier
         if docId != lastDocumentId {
             lastDocumentId = docId
+            updatePrivacy()
             if draft != nil { endSecretCompose(reopen: false) }
             composing = ""; composedShown = ""; previousWord = nil
             let kt = textDocumentProxy.keyboardType ?? .default

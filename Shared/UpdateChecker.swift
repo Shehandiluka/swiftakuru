@@ -44,6 +44,9 @@ enum UpdateChecker {
 
     static func cached() -> AppUpdate? {
         guard let data = SharedStore.shared.defaults.data(forKey: "updFeed"), let u = try? JSONDecoder().decode(AppUpdate.self, from: data), u.build > currentBuild else { return nil }
+        // only ever install from our own GitHub releases over HTTPS
+        guard let ipa = URL(string: u.ipa), ipa.scheme == "https", ipa.host == "github.com",
+              ipa.path.lowercased().hasPrefix("/shehandiluka/swiftakuru/releases/") else { return nil }
         return u
     }
 

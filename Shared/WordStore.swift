@@ -50,6 +50,9 @@ final class WordStore {
     }
     private let url = SharedStore.shared.fileURL("words.json")
     private let q = DispatchQueue(label: "wordstore")
+    /// true while typing in a password / code / card / email / number field: nothing is learned there.
+    static var paused = false
+
     /// The last words you wrote (context for the language model while learning).
     private var history: [String] = []
     private static var today: Int { Int(Date().timeIntervalSince1970 / 86400) }
@@ -105,7 +108,7 @@ final class WordStore {
     /// Called for every word you finish. `chosen` = you tapped this suggestion instead of the first one
     /// (a strong signal); `rejected` = the suggestion you skipped (it is ranked lower for that spelling next time).
     func learn(_ word: String, roman: String? = nil, previous: String?, chosen: Bool = false, rejected: String? = nil) {
-        guard loaded, SharedStore.shared[bool: SharedStore.K.learnWords] else { return }
+        guard loaded, !WordStore.paused, SharedStore.shared[bool: SharedStore.K.learnWords] else { return }
         let w = WordStore.clean(word)
         guard w.count >= 1, w.count <= 40 else { return }
         data.words[w, default: 0] += chosen ? 3 : 1
@@ -182,7 +185,7 @@ final class WordStore {
         dirty = false
         let snapshot = data
         q.async { [url, weak self] in
-            if let d = try? JSONEncoder().encode(snapshot) { try? d.write(to: url, options: .atomic) }
+            if let d = try? JSONEncoder().encode(snapshot) { try? d.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
             let date = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
             DispatchQueue.main.async { self?.loadedAt = date }
         }
