@@ -50,24 +50,45 @@ final class WordStore {
     private func fileDate() -> Date? { (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date }
     /// The app may have taught new words while the keyboard was closed — pick them up (cheap date check).
     func reloadIfChanged() {
-        guard !dirty, let d = fileDate(), d != loadedAt else { return }
+        guard loaded, !dirty, let d = fileDate(), d != loadedAt else { return }
         q.async { [url] in
             guard let raw = try? Data(contentsOf: url), let m = try? JSONDecoder().decode(Model.self, from: raw) else { return }
             DispatchQueue.main.async { if !self.dirty { self.data = m; self.loadedAt = d } }
         }
     }
 
+    /// false for a moment after the keyboard starts: everything is read in the background so the keys appear at once.
+    private(set) var loaded = false
+
     private init() {
-        if let d = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(Model.self, from: d) { data = decoded }
-        loadedAt = fileDate()
-        for b in [Bundle.main, Bundle(for: WordStore.self)] {
-            if let u = b.url(forResource: "words_si", withExtension: "txt"), let text = try? String(contentsOf: u, encoding: .utf8) {
-                let list = text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                builtin = list.map { (skel: Singlish.sinhalaSkeleton($0), word: $0) }.sorted { $0.skel < $1.skel }
-                builtinSet = Set(list)
-                break
+        q.async { [url] in
+            var model = Model()
+            if let d = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(Model.self, from: d) { model = decoded }
+            var bi: [(skel: String, word: String)] = [], set: Set<String> = []
+            for b in [Bundle.main, Bundle(for: WordStore.self)] {
+                if let u = b.url(forResource: "words_si", withExtension: "txt"), let text = try? String(contentsOf: u, encoding: .utf8) {
+                    let list = text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                    bi = list.map { (skel: Singlish.sinhalaSkeleton($0), word: $0) }.sorted { $0.skel < $1.skel }
+                    set = Set(list)
+                    break
+                }
+            }
+            let date = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            DispatchQueue.main.async {
+                self.data = model
+                self.builtin = bi
+                self.builtinSet = set
+                self.loadedAt = date
+                self.loaded = true
             }
         }
+    }
+
+    /// Tests: wait for the background load.
+    func waitUntilLoaded() {
+        q.sync {}
+        let until = Date().addingTimeInterval(2)
+        while !loaded && Date() < until { RunLoop.current.run(until: Date().addingTimeInterval(0.01)) }
     }
 
     static func clean(_ w: String) -> String { w.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters).union(.symbols)) }
@@ -76,7 +97,7 @@ final class WordStore {
     /// Called for every word you finish. `chosen` = you tapped this suggestion instead of the first one
     /// (a strong signal); `rejected` = the suggestion you skipped (it is ranked lower for that spelling next time).
     func learn(_ word: String, roman: String? = nil, previous: String?, chosen: Bool = false, rejected: String? = nil) {
-        guard SharedStore.shared[bool: SharedStore.K.learnWords] else { return }
+        guard loaded, SharedStore.shared[bool: SharedStore.K.learnWords] else { return }
         let w = WordStore.clean(word)
         guard w.count >= 1, w.count <= 40 else { return }
         data.words[w, default: 0] += chosen ? 3 : 1

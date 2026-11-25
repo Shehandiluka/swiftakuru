@@ -40,6 +40,7 @@ final class TranslatorTests: XCTestCase {
 final class LearningTests: XCTestCase {
     func testPickedWordBecomesFirstForThatSpelling() {
         let ws = WordStore.shared
+        ws.waitUntilLoaded()
         ws.forgetAll()
         SharedStore.shared[bool: SharedStore.K.learnWords] = true
         let direct = Singlish.convert("kohomada")
@@ -52,6 +53,7 @@ final class LearningTests: XCTestCase {
     }
     func testNextWordPrediction() {
         let ws = WordStore.shared
+        ws.waitUntilLoaded()
         ws.forgetAll()
         SharedStore.shared[bool: SharedStore.K.learnWords] = true
         ws.learn(fromText: "සුබ උදෑසනක් වේවා\nසුබ උදෑසනක් මචං\nසුබ රාත්‍රියක්")

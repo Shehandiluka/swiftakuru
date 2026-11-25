@@ -162,7 +162,12 @@ final class SharedStore {
         for k in SharedStore.settingKeys { if let v = defaults.object(forKey: k) { snap[k] = v } }
         guard PropertyListSerialization.propertyList(snap, isValidFor: .binary),
               let d = try? PropertyListSerialization.data(fromPropertyList: snap, format: .binary, options: 0) else { return }
-        keychainSave(d.base64EncodedString(), SharedStore.settingsAccount)
+        let b64 = d.base64EncodedString()
+        // only touch the Keychain when something actually changed
+        let h = String(b64.hashValue)
+        guard defaults.string(forKey: "settingsBackupHash") != h else { return }
+        defaults.set(h, forKey: "settingsBackupHash")
+        keychainSave(b64, SharedStore.settingsAccount)
     }
     private func restoreSettings() {
         defer { defaults.set(true, forKey: SharedStore.settingsMarker) }
@@ -179,10 +184,14 @@ final class SharedStore {
     }
     /// Empty settings (new App Group after an update) → bring the saved keys back from the Keychain.
     private func restoreAIKeys() {
+        // Keychain is only read when these settings are new (fresh install / new App Group) — never on every launch,
+        // because the keyboard must start instantly.
+        let marker = "aiRestoreChecked"
+        guard !defaults.bool(forKey: marker) else { return }
+        defaults.set(true, forKey: marker)
         var restored = false
-        for k in SharedStore.secretKeys {
-            if (defaults.string(forKey: k) ?? "").isEmpty, let v = keychainLoad(k) { defaults.set(v, forKey: k); restored = true }
-            else if let v = defaults.string(forKey: k), !v.isEmpty, keychainLoad(k) != v { keychainSave(v, k) }
+        for k in SharedStore.secretKeys where (defaults.string(forKey: k) ?? "").isEmpty {
+            if let v = keychainLoad(k) { defaults.set(v, forKey: k); restored = true }
         }
         if restored, (defaults.string(forKey: K.aiKeyGemini) ?? "").isEmpty { defaults.set("openai", forKey: K.aiProvider) }
     }

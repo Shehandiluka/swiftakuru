@@ -65,6 +65,7 @@ final class KeyboardViewController: UIInputViewController {
 
     // MARK: lifecycle
     override func viewDidLoad() {
+        KBDiag.mark("load")
         super.viewDidLoad()
         view.clipsToBounds = false
         gradient.startPoint = CGPoint(x: 0, y: 0); gradient.endPoint = CGPoint(x: 1, y: 1)
@@ -90,6 +91,15 @@ final class KeyboardViewController: UIInputViewController {
         ])
         panelHost.isHidden = true
         applySettings()
+        KBDiag.mark("loaded")
+    }
+
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        KBDiag.memoryWarning()
+        // give memory back so iOS does not close the keyboard
+        if panel is EmojiPanel || panel is TranslatePanel { closePanel() }
+        bar.lastEmoji = []
     }
 
     /// iOS ignores a height constraint added before the keyboard is on screen (it then squeezes it to ~216 pt),
@@ -109,11 +119,13 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        KBDiag.mark("appear")
         ensureHeight()
         keys.scheduleNameGlow()
     }
 
     override func viewWillAppear(_ animated: Bool) {
+        KBDiag.mark("willAppear")
         super.viewWillAppear(animated)
         ensureHeight()
         applySettings()
@@ -143,6 +155,7 @@ final class KeyboardViewController: UIInputViewController {
         commitComposition()
         WordStore.shared.save()
         store.backupSettings()
+        KBDiag.mark("disappear")
         keys.stopNameGlow()
         super.viewWillDisappear(animated)
     }

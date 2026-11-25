@@ -308,6 +308,7 @@ struct MoreView: View {
     @State private var checking = false
     @State private var checkMsg = ""
     @State private var teach = ""
+    @State private var diagTick = 0
     @State private var teachMsg = ""
     var body: some View {
         Group {
@@ -343,6 +344,12 @@ struct MoreView: View {
                     ForEach(words.indices, id: \.self) { k in let w = words[k]; HStack { Text(w.0); Spacer(); Text("\(w.1)").foregroundStyle(.secondary) } }
                         .onDelete { idx in for i in idx { WordStore.shared.forget(words[i].0) }; words.remove(atOffsets: idx) }
                 }
+                Section {
+                    ForEach(KBDiag.report, id: \.0) { r in HStack { Text(r.0); Spacer(); Text(r.1).foregroundStyle(.secondary) } }
+                    Button("Reset") { KBDiag.reset(); diagTick += 1 }
+                } header: { Text("🩺 Keyboard health") } footer: {
+                    Text("Keyboard එක හිස්ව ආවොත් මේ කොටසේ screenshot එකක් එවන්න — හේතුව හොයාගන්න උදව් වෙනවා.")
+                }.id(diagTick)
                 Section("Updates") {
                     HStack { Text("Version"); Spacer(); Text("\(UpdateChecker.currentVersion) (build \(UpdateChecker.currentBuild))").foregroundStyle(.secondary) }
                     Button(checking ? "Checking…" : "Update තියෙනවද බලන්න") {
@@ -358,6 +365,7 @@ struct MoreView: View {
                     Text("Privacy: ඔයා type කරන දේ phone එකේම තියෙනවා. Internet එකට යන්නේ ඔයා AI button එක ඔබපු text එක විතරයි (Google/OpenAI වෙත).").font(.footnote)
                 }
             }.navigationTitle("More")
+            .task { WordStore.shared.waitUntilLoaded(); words = Array(WordStore.shared.learnedList.prefix(300)) }
         }
     }
     private func save() { SharedStore.shared.shortcuts = Dictionary(shortcuts, uniquingKeysWith: { _, b in b }) }
