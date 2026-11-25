@@ -15,6 +15,7 @@ final class WordStore {
         var picks: [String: [String: Int]] = [:]     // roman typed → Sinhala word chosen → strength
         var lastDay: [String: Int] = [:]             // word → day it was last used (recency)
         var trigrams: [String: [String: Int]] = [:]  // "w1 w2" → next word → count
+        var lm = PersonalLM()                         // personal language model (next word / next letter)
 
         init() {}
         init(from d: Decoder) throws {
@@ -25,6 +26,12 @@ final class WordStore {
             picks = try c.decodeIfPresent([String: [String: Int]].self, forKey: .picks) ?? [:]
             lastDay = try c.decodeIfPresent([String: Int].self, forKey: .lastDay) ?? [:]
             trigrams = try c.decodeIfPresent([String: [String: Int]].self, forKey: .trigrams) ?? [:]
+            lm = try c.decodeIfPresent(PersonalLM.self, forKey: .lm) ?? PersonalLM()
+            // older versions kept only word pairs: move them into the language model once
+            if lm.isEmpty, !bigrams.isEmpty {
+                for (p, m) in bigrams { for (w, n) in m { lm.seedPair(p, w, n) } }
+            }
+            bigrams = [:]; trigrams = [:]
         }
     }
 
@@ -43,7 +50,8 @@ final class WordStore {
     }
     private let url = SharedStore.shared.fileURL("words.json")
     private let q = DispatchQueue(label: "wordstore")
-    private var prevPrev: String?
+    /// The last words you wrote (context for the language model while learning).
+    private var history: [String] = []
     private static var today: Int { Int(Date().timeIntervalSince1970 / 86400) }
 
     private var loadedAt: Date?
@@ -107,12 +115,15 @@ final class WordStore {
             data.picks[r, default: [:]][w, default: 0] += chosen ? 4 : 1
             if let rj = rejected, rj != w, let v = data.picks[r]?[rj] { data.picks[r]?[rj] = max(0, v - 2) }
         }
+        // language model: learn "after these words comes this word"
         let p = previous.map(WordStore.clean) ?? ""
-        if !p.isEmpty {
-            data.bigrams[p, default: [:]][w, default: 0] += 1
-            if let pp = prevPrev, !pp.isEmpty { data.trigrams[pp + " " + p, default: [:]][w, default: 0] += 1 }
-        }
-        prevPrev = p.isEmpty ? nil : p
+        if p.isEmpty { history = [] } else if history.last != p { history = [p] }
+        data.lm.observe(w, context: history)
+        history.append(w)
+        if history.count > PersonalLM.order { history.removeFirst() }
+        if let last = word.trimmingCharacters(in: .whitespaces).last, ".?!।".contains(last) { history = [] }
+        // letter model: learn the keys you press, in order
+        if let r = roman, !r.isEmpty { data.lm.observeChars(r) } else if !Singlish.isSinhala(w), w.count <= 20 { data.lm.observeChars(w) }
         if data.words.count > 9000 { prune() }
         dirty = true
         scheduleSave()
@@ -124,7 +135,7 @@ final class WordStore {
         var n = 0
         for line in text.components(separatedBy: .newlines) {
             var prev: String?
-            prevPrev = nil
+            history = []
             for raw in line.split(whereSeparator: { $0.isWhitespace }) {
                 let w = WordStore.clean(String(raw))
                 guard w.count >= 1, w.count <= 40, !w.allSatisfy({ $0.isNumber }) else { prev = nil; continue }
@@ -137,6 +148,7 @@ final class WordStore {
     }
 
     func forget(_ word: String) {
+        data.lm.forget(word)
         data.words.removeValue(forKey: word); data.romanOf.removeValue(forKey: word); data.bigrams.removeValue(forKey: word); data.lastDay.removeValue(forKey: word)
         for k in data.bigrams.keys { data.bigrams[k]?.removeValue(forKey: word) }
         for k in data.picks.keys { data.picks[k]?.removeValue(forKey: word) }
@@ -177,7 +189,17 @@ final class WordStore {
     }
 
     var stats: (words: Int, pairs: Int, spellings: Int) {
-        (data.words.count, data.bigrams.values.reduce(0) { $0 + $1.count }, data.picks.count)
+        (data.words.count, data.lm.stats.contexts, data.picks.count)
+    }
+
+    /// Next-letter probability for the keys (0 until the model is loaded → touches are left alone).
+    func pNextChar(_ c: String, prefix: String) -> Double {
+        loaded ? data.lm.pChar(c, after: prefix) : 0
+    }
+
+    /// Language-model score of a word in this context, 0 (unlikely) … ~8 (very likely).
+    private func lmScore(_ w: String, _ context: [String]) -> Double {
+        max(0, log2(data.lm.p(w, context)) + 16) * 0.5
     }
 
     // MARK: suggestions
@@ -186,24 +208,21 @@ final class WordStore {
     /// (2) the words around it (what you usually write after the previous word),
     /// (3) the dictionary + your vocabulary (spelling match, how often and how recently used).
     /// `primary` is the word space will type: the direct conversion, unless you have clearly taught a better one.
-    func sinhalaSuggestions(roman: String, previous: String? = nil, max: Int = 3) -> (list: [String], primary: Int) {
+    func sinhalaSuggestions(roman: String, context: [String] = [], max: Int = 3) -> (list: [String], primary: Int) {
         guard !roman.isEmpty else { return ([], -1) }
         let r = roman.lowercased()
         let direct = Singlish.convert(roman)
         let skel = Singlish.romanSkeleton(roman)
-        let prev = previous.map(WordStore.clean) ?? ""
-        let ctx = data.bigrams[prev]
-        let ctx3 = prevPrev.flatMap { data.trigrams[$0 + " " + prev] }
+        let context = context.map(WordStore.clean).filter { !$0.isEmpty }
+        let lmP = data.lm.scorer(context)
         let t = WordStore.today
         var score: [String: Double] = [:]
 
         func base(_ w: String) -> Double {
             var s = 0.0
-            if let c = data.words[w] { s += 1.6 * log2(1 + Double(c)) }
-            if let d = data.lastDay[w] { s += t - d <= 1 ? 1.2 : (t - d <= 7 ? 0.6 : 0) }
-            if let n = ctx?[w] { s += 2.6 * log2(1 + Double(n)) }
-            if let n = ctx3?[w] { s += 2.0 * log2(1 + Double(n)) }
-            if builtinSet.contains(w) { s += 0.8 }
+            s += max(0, log2(lmP(w)) + 16) * 0.5   // how likely this word is here (frequency + the words before it)
+            if let d = data.lastDay[w] { s += t - d <= 1 ? 1.0 : (t - d <= 7 ? 0.5 : 0) }
+            if builtinSet.contains(w) { s += 0.6 }
             return s
         }
         func add(_ w: String, _ s: Double) { score[w] = Swift.max(score[w] ?? -.infinity, s + base(w)) }
@@ -217,8 +236,8 @@ final class WordStore {
             for (w, rr) in data.romanOf where rr.count > r.count && rr.hasPrefix(r) { add(w, 2.2 - 0.25 * Double(rr.count - r.count)) }
         }
         // (2) words that usually come next (only if they fit what you are typing)
-        if let c = ctx {
-            for (w, _) in c where Singlish.isSinhala(w) {
+        do {
+            for (w, _) in data.lm.predict(context, k: 60, filter: Singlish.isSinhala) {
                 let ws = skeleton(w)
                 if ws == skel { add(w, 2.0) } else if skel.count >= 2, ws.hasPrefix(skel) { add(w, 1.0 - 0.15 * Double(ws.count - skel.count)) }
             }
@@ -284,15 +303,25 @@ final class WordStore {
         return (Array(out.prefix(max)), correction)
     }
 
-    /// Next-word predictions: your own word pairs/triples, most used first.
-    func nextWords(after previous: String, max: Int = 3) -> [String] {
-        let p = WordStore.clean(previous)
-        var score: [String: Double] = [:]
-        if let pp = prevPrev, let m = data.trigrams[pp + " " + p] { for (w, n) in m { score[w, default: 0] += 3 * log2(1 + Double(n)) } }
-        if let m = data.bigrams[p] ?? data.bigrams[p.lowercased()] { for (w, n) in m { score[w, default: 0] += 2 * log2(1 + Double(n)) } }
-        let t = WordStore.today
-        for w in score.keys { if let d = data.lastDay[w], t - d <= 2 { score[w]! += 0.5 } }
-        return score.sorted { $0.value > $1.value }.prefix(max).map { $0.key }
+    /// Next-word predictions from the personal language model.
+    func nextWords(context: [String], max: Int = 3) -> [String] {
+        guard loaded else { return [] }
+        let ctx = context.map(WordStore.clean).filter { !$0.isEmpty }
+        guard !ctx.isEmpty else { return [] }
+        return data.lm.predict(ctx, k: max).filter { $0.1 > 0.02 }.map { $0.0 }
+    }
+
+    /// Re-orders English completions by how likely they are in this context (corrections keep their place).
+    func rankByContext(_ list: [String], context: [String]) -> [String] {
+        guard loaded, list.count > 1 else { return list }
+        let ctx = context.map(WordStore.clean).filter { !$0.isEmpty }
+        let lmP = data.lm.scorer(ctx)
+        func sc(_ w: String) -> Double { max(0, log2(lmP(w.lowercased())) + 16) * 0.5 }
+        return list.enumerated().sorted { a, b in
+            let sa = sc(a.element) - Double(a.offset) * 0.8
+            let sb = sc(b.element) - Double(b.offset) * 0.8
+            return sa > sb
+        }.map { $0.element }
     }
 
     private func matchCase(_ w: String, _ typed: String) -> String {

@@ -57,7 +57,35 @@ final class LearningTests: XCTestCase {
         ws.forgetAll()
         SharedStore.shared[bool: SharedStore.K.learnWords] = true
         ws.learn(fromText: "සුබ උදෑසනක් වේවා\nසුබ උදෑසනක් මචං\nසුබ රාත්‍රියක්")
-        XCTAssertEqual(ws.nextWords(after: "සුබ").first, "උදෑසනක්")
+        XCTAssertEqual(ws.nextWords(context: ["සුබ"]).first, "උදෑසනක්")
         ws.forgetAll()
+    }
+}
+
+final class PersonalLMTests: XCTestCase {
+    func testKneserNeyPrefersSeenContinuation() {
+        var lm = PersonalLM()
+        for _ in 0..<5 { lm.observe("කොහොමද", context: ["ඔයා"]) }
+        lm.observe("කොහෙද", context: ["ඔයා"])
+        lm.observe("කොහෙද", context: ["එයා"])
+        XCTAssertGreaterThan(lm.p("කොහොමද", ["ඔයා"]), lm.p("කොහෙද", ["ඔයා"]))
+        XCTAssertGreaterThan(lm.p("කොහොමද", ["ඔයා"]), 0.4)
+        XCTAssertGreaterThan(lm.p("unknown", ["ඔයා"]), 0)        // never zero
+        XCTAssertEqual(lm.predict(["ඔයා"], k: 1).first?.0, "කොහොමද")
+    }
+    func testProbabilitiesRoughlySumToOne() {
+        var lm = PersonalLM()
+        let text = "a b c a b d a b c b c a".split(separator: " ").map(String.init)
+        var ctx: [String] = []
+        for w in text { lm.observe(w, context: ctx); ctx.append(w) }
+        let sum = ["a", "b", "c", "d"].map { lm.p($0, ["a", "b"]) }.reduce(0, +)
+        XCTAssertGreaterThan(sum, 0.3); XCTAssertLessThanOrEqual(sum, 1.0001)
+    }
+    func testNextLetterPrediction() {
+        var lm = PersonalLM()
+        for _ in 0..<4 { lm.observeChars("kohomada") }
+        lm.observeChars("koheda")
+        XCTAssertGreaterThan(lm.pChar("o", after: "^koh"), lm.pChar("e", after: "^koh"))
+        XCTAssertGreaterThan(lm.pChar("m", after: "^koho"), lm.pChar("n", after: "^koho"))
     }
 }

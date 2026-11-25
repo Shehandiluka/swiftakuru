@@ -75,6 +75,11 @@ final class KeyboardViewController: UIInputViewController {
         for v in [bgImage, bar, keys, panelHost] as [UIView] { v.translatesAutoresizingMaskIntoConstraints = false; view.addSubview(v) }
         keys.overlay = view
         keys.onKey = { [weak self] s, e in self?.handle(s, e) }
+        // smart touch: a tap between two letters goes to the one you are more likely to want next
+        keys.nextLetterProbability = { [weak self] letter in
+            guard let self = self, self.page == .letters, self.store[bool: SharedStore.K.smartTouch] else { return nil }
+            return WordStore.shared.pNextChar(letter, prefix: self.letterPrefix)
+        }
         bar.onPick = { [weak self] s in self?.pickSuggestion(s) }
         bar.onTool = { [weak self] t in self?.tool(t) }
         barTopC = bar.topAnchor.constraint(equalTo: view.topAnchor)
@@ -524,7 +529,7 @@ final class KeyboardViewController: UIInputViewController {
     func refreshBar() {
         if panel != nil { return }
         if !composing.isEmpty {
-            let sug = WordStore.shared.sinhalaSuggestions(roman: composing, previous: previousWord)
+            let sug = WordStore.shared.sinhalaSuggestions(roman: composing, context: contextWords())
             var list = sug.list, primary = sug.primary
             if list.isEmpty { primary = -1 }
             bestFor = list.first.map { (composing, $0) }
@@ -536,7 +541,7 @@ final class KeyboardViewController: UIInputViewController {
             let w = currentWord()
             if !w.isEmpty, !Singlish.isSinhala(w) {
                 let (list, corr) = WordStore.shared.englishSuggestions(partial: w)
-                var items = list
+                var items = corr == nil ? WordStore.shared.rankByContext(list, context: contextWords()) : list
                 if store[bool: SharedStore.K.emojiSuggest] { items += EmojiData.suggestions(for: w).prefix(2) }
                 if !items.isEmpty {
                     bar.showSuggestions(items, primary: corr.flatMap { items.firstIndex(of: $0) } ?? -1)
@@ -545,8 +550,8 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
         // after a word: next-word predictions + emoji
-        if let p = previousWord {
-            let next = WordStore.shared.nextWords(after: p)
+        if previousWord != nil {
+            let next = WordStore.shared.nextWords(context: contextWords())
             let emo = Array(bar.lastEmoji.prefix(3))
             if !next.isEmpty || !emo.isEmpty { bar.showSuggestions(next + emo, primary: -1); return }
         }
@@ -596,6 +601,23 @@ final class KeyboardViewController: UIInputViewController {
             r = x.next
         }
         extensionContext?.open(url, completionHandler: nil)
+    }
+
+    /// The last (up to 3) finished words before the cursor — the context the language model predicts from.
+    func contextWords() -> [String] {
+        var before = input.documentContextBeforeInput ?? ""
+        if !composedShown.isEmpty, before.hasSuffix(composedShown) { before.removeLast(composedShown.count) }
+        else if !singlish, !currentWord().isEmpty { before.removeLast(min(before.count, currentWord().count)) }
+        // only the current sentence
+        if let r = before.lastIndex(where: { ".?!\n।".contains($0) }) { before = String(before[before.index(after: r)...]) }
+        return before.split(whereSeparator: { $0.isWhitespace }).suffix(3).map(String.init)
+    }
+
+    /// The letters of the word being typed, for next-letter prediction ("^" = start of word).
+    var letterPrefix: String {
+        if !composing.isEmpty { return "^" + composing.lowercased() }
+        if !singlish { return "^" + currentWord().lowercased() }
+        return "^"
     }
 
     // MARK: toolbar & panels

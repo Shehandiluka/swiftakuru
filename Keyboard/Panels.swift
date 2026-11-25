@@ -528,6 +528,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         toggle("Emoji suggestions", SharedStore.K.emojiSuggest)
         toggle("මම type කරන වචන ඉගෙනගන්න", SharedStore.K.learnWords)
         toggle("Type නොකරන වෙලාවට SHEHAN නම keys වල පෙන්නන්න", SharedStore.K.nameGlow, rebuild: true)
+        toggle("Smart touch (keys දෙකක් අතර ඔබුවම ඊළඟට ඕන අකුර)", SharedStore.K.smartTouch)
         header("CLIPBOARD")
         toggle("Copy කරන දේ auto save කරන්න", SharedStore.K.clipAuto)
         let clipNote = UILabel()

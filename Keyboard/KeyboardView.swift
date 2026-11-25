@@ -80,6 +80,30 @@ final class KeyboardView: UIView {
     private var altIndex = 0
     var shiftState = 0 // 0 off, 1 on, 2 lock
     fileprivate var glowState: (timer: Timer?, step: Int, cycles: Int, lit: KeyButton?) = (nil, 0, 0, nil)
+    /// Returns P(next letter) from the personal language model, or nil when smart touch is off.
+    var nextLetterProbability: ((String) -> Double?)?
+
+    /// Smart touch: the system keyboard trick — when a finger lands near the edge between letter keys, the touch goes to
+    /// the key that combines "how close" (a 2-D Gaussian around each key centre) with "how likely next" (letter model).
+    /// A tap clearly inside a key always stays on that key.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        guard let b = hit as? KeyButton, case .char(let c0) = b.spec.kind, c0.count == 1, altView == nil,
+              let prob = nextLetterProbability, let p0 = prob(c0.lowercased()) else { return hit }
+        var best = b, bestScore = -1.0
+        for k in rows.flatMap({ $0 }) where !k.isHidden {
+            guard case .char(let c) = k.spec.kind, c.count == 1, c.first?.isLetter == true else { continue }
+            let f = k.frame, w = max(f.width, 1), h = max(f.height, 1)
+            guard f.insetBy(dx: -w * 0.3, dy: -h * 0.15).contains(point) else { continue }
+            let dx = (point.x - f.midX) / (w * 0.45), dy = (point.y - f.midY) / (h * 0.55)
+            let spatial = exp(-(dx * dx + dy * dy) / 2)
+            let pk = k === b ? p0 : (prob(c.lowercased()) ?? 0)
+            let score = spatial * pow(max(pk, 1e-6), 0.5)
+            if score > bestScore { bestScore = score; best = k }
+        }
+        return best
+    }
+
     var nameGlowEnabled = true { didSet { if !nameGlowEnabled { stopNameGlow() } } }
 
     override init(frame: CGRect) {
