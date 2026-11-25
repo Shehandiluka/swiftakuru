@@ -32,7 +32,8 @@ enum KBDiag {
     static func memoryWarning() { d.set(d.integer(forKey: "diag.memWarn") + 1, forKey: "diag.memWarn") }
 
     static var report: [(String, String)] {
-        [("Keyboard open වුණ වාර", "\(d.integer(forKey: "diag.launches"))"),
+        [("App Group", SharedStore.shared.activeGroup.map { String($0.suffix(28)) } ?? "❌ නැහැ (app ↔ keyboard වෙන වෙනම)"),
+         ("Keyboard open වුණ වාර", "\(d.integer(forKey: "diag.launches"))"),
          ("හිස්ව ආව වාර (ඇස්තමේන්තුව)", "\(d.integer(forKey: "diag.blank"))"),
          ("අන්තිම හිස් වීම", d.string(forKey: "diag.lastBlank") ?? "—"),
          ("Memory warnings", "\(d.integer(forKey: "diag.memWarn"))"),

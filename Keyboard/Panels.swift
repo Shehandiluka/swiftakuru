@@ -537,6 +537,13 @@ final class SettingsPanel: UIView, ThemedPanel {
         clipNote.textColor = theme.specialText
         clipNote.text = "\"Allow Paste\" ආයේ අහන්නේ නැති වෙන්න: iPhone Settings → Swift Akuru → Paste from Other Apps → Allow. ඊට පස්සේ මේක ON කරන්න."
         stack.addArrangedSubview(clipNote)
+        header("🩺 KEYBOARD HEALTH")
+        let diag = UILabel()
+        diag.numberOfLines = 0
+        diag.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+        diag.textColor = theme.specialText
+        diag.text = KBDiag.report.map { "\($0.0): \($0.1)" }.joined(separator: "\n") + String(format: "\nදැන් memory: %.0f MB", KBDiag.memoryMB())
+        stack.addArrangedSubview(diag)
         header("FEEDBACK (Full Access ඕන)")
         toggle("Key sound", SharedStore.K.sound)
         toggle("Vibration (haptics)", SharedStore.K.haptics)
