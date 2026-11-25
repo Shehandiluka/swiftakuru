@@ -88,12 +88,12 @@ final class SuggestionBar: UIView {
                 // Swift Akuru logo: long-press opens the app
                 b.setImage(UIImage(named: "kblogo")?.withRenderingMode(.alwaysOriginal), for: .normal)
                 b.imageView?.contentMode = .scaleAspectFit
-                b.imageEdgeInsets = UIEdgeInsets(top: 9, left: 9, bottom: 9, right: 9)
+                b.imageEdgeInsets = UIEdgeInsets(top: 4, left: 4, bottom: 4, right: 4)   // the logo is shown bigger than the icons
                 let lp = UILongPressGestureRecognizer(target: self, action: #selector(longTool(_:)))
                 lp.minimumPressDuration = 0.45
                 b.addGestureRecognizer(lp)
-            } else if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal) } else {
-                b.setTitle(text, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            } else if let s = sym { b.setImage(SuggestionBar.icon(s), for: .normal) } else {
+                b.setTitle(text, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 19, weight: .medium)
             }
             b.tintColor = (id == "settings" && update) ? UIColor.systemOrange : ((id == "ai" || (id == "translate" && ClipboardStore.shared.pending)) ? theme.accent : theme.specialText)
             b.setTitleColor(theme.specialText, for: .normal)
@@ -102,6 +102,21 @@ final class SuggestionBar: UIView {
             b.addTarget(self, action: #selector(tapTool(_:)), for: .touchUpInside)
             stack.addArrangedSubview(b)
         }
+    }
+
+    /// Every toolbar icon drawn into the same box (the size of the ⚙️ gear), so they all look the same size.
+    private static var iconCache: [String: UIImage] = [:]
+    static func icon(_ name: String) -> UIImage? {
+        if let i = iconCache[name] { return i }
+        guard let sym = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 40, weight: .regular)) else { return nil }
+        let box: CGFloat = 22
+        let k = min(box / sym.size.width, box / sym.size.height)
+        let sz = CGSize(width: sym.size.width * k, height: sym.size.height * k)
+        let img = UIGraphicsImageRenderer(size: CGSize(width: box, height: box)).image { _ in
+            sym.withTintColor(.black, renderingMode: .alwaysOriginal).draw(in: CGRect(x: (box - sz.width) / 2, y: (box - sz.height) / 2, width: sz.width, height: sz.height))
+        }.withRenderingMode(.alwaysTemplate)
+        iconCache[name] = img
+        return img
     }
 
     @objc private func tapTool(_ b: UIButton) { if let id = b.accessibilityIdentifier { onTool?(id) } }

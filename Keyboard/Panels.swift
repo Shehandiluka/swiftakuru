@@ -446,13 +446,6 @@ final class SettingsPanel: UIView, ThemedPanel {
     required init?(coder: NSCoder) { fatalError() }
     func applyTheme(_ t: KBTheme) { theme = t; stack.arrangedSubviews.forEach { $0.removeFromSuperview() }; build() }
 
-    @objc private func previewSeason(_ b: UIButton) {
-        if b.tag < 0 { store.defaults.removeObject(forKey: "seasonPreview") }
-        else { store.defaults.set(Season.previewOrder[b.tag], forKey: "seasonPreview") }
-        kb?.closePanel()
-        kb?.updateSeason()
-    }
-
     private func header(_ t: String) {
         let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 12, weight: .bold); l.textColor = theme.hint
         l.heightAnchor.constraint(equalToConstant: 26).isActive = true
@@ -534,7 +527,6 @@ final class SettingsPanel: UIView, ThemedPanel {
         toggle("Space දෙපාරක් = full stop", SharedStore.K.doubleSpace)
         toggle("Emoji suggestions", SharedStore.K.emojiSuggest)
         toggle("මම type කරන වචන ඉගෙනගන්න", SharedStore.K.learnWords)
-        toggle("Type නොකරන වෙලාවට SHEHAN නම keys වල පෙන්නන්න", SharedStore.K.nameGlow, rebuild: true)
         toggle("Smart touch (keys දෙකක් අතර ඔබුවම ඊළඟට ඕන අකුර)", SharedStore.K.smartTouch)
         header("CLIPBOARD")
         toggle("Copy කරන දේ auto save කරන්න", SharedStore.K.clipAuto)
@@ -544,24 +536,6 @@ final class SettingsPanel: UIView, ThemedPanel {
         clipNote.textColor = theme.specialText
         clipNote.text = "\"Allow Paste\" ආයේ අහන්නේ නැති වෙන්න: iPhone Settings → Swift Akuru → Paste from Other Apps → Allow. ඊට පස්සේ මේක ON කරන්න."
         stack.addArrangedSubview(clipNote)
-        header("🎉 SEASONS")
-        toggle("උත්සව කාලවලට keyboard එකේ animations (නත්තල් හිම, අවුරුදු කැවිලි…)", SharedStore.K.seasonFx)
-        let row = UIStackView(); row.axis = .horizontal; row.spacing = 4; row.distribution = .fillEqually
-        row.heightAnchor.constraint(equalToConstant: 34).isActive = true
-        let auto = pill("Auto", theme: theme, filled: store.defaults.string(forKey: "seasonPreview") == nil, size: 12)
-        auto.addTarget(self, action: #selector(previewSeason(_:)), for: .touchUpInside)
-        auto.tag = -1
-        row.addArrangedSubview(auto)
-        for (i, id) in Season.previewOrder.prefix(6).enumerated() {
-            let b = pill(Season.icons[id] ?? "?", theme: theme, filled: store.defaults.string(forKey: "seasonPreview") == id, size: 16)
-            b.tag = i
-            b.addTarget(self, action: #selector(previewSeason(_:)), for: .touchUpInside)
-            row.addArrangedSubview(b)
-        }
-        stack.addArrangedSubview(row)
-        let pnote = UILabel(); pnote.numberOfLines = 0; pnote.font = .systemFont(ofSize: 11); pnote.textColor = theme.specialText
-        pnote.text = "Icon එකක් ඔබලා දැන්ම බලන්න. Auto = ලංකාවේ උත්සව දවස් ළඟ එනකොට ඉබේම."
-        stack.addArrangedSubview(pnote)
         header("🩺 KEYBOARD HEALTH")
         let diag = UILabel()
         diag.numberOfLines = 0

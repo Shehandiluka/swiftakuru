@@ -106,7 +106,7 @@ enum KeyLayout {
 
     static func numbersPage(symbols: Bool, singlish: Bool, showGlobe: Bool) -> [[KeySpec]] {
         let r1 = symbols ? ["[", "]", "{", "}", "#", "%", "^", "*", "+", "="] : numbers
-        let r2 = symbols ? ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•"] : ["-", "/", ":", ";", "(", ")", "රු", "&", "@", "\""]
+        let r2 = symbols ? ["_", "\\", "|", "~", "<", ">", "€", "£", "¥", "•"] : ["-", "/", ":", ";", "(", ")", "$", "&", "@", "\""]
         let r3 = symbols ? [".", ",", "?", "!", "'"] : [".", ",", "?", "!", "'"]
         return [
             r1.map { KeySpec(kind: .char($0), label: $0) },

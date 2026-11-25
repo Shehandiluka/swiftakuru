@@ -34,8 +34,8 @@ struct Season: Equatable {
 
     static func current(_ now: Date = Date()) -> Season? {
         let d = SharedStore.shared.defaults
-        if let p = d.string(forKey: "seasonPreview"), let s = all[p] { return s }
-        guard d.bool(forKey: SharedStore.K.seasonFx) else { return nil }
+        // automatic only — follows the calendar, nothing for the user to switch
+        if d.object(forKey: "seasonPreview") != nil { d.removeObject(forKey: "seasonPreview") }
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Colombo") ?? .current
         let c = cal.dateComponents([.month, .day], from: now)

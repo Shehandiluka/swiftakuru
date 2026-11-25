@@ -185,7 +185,7 @@ final class KeyboardViewController: UIInputViewController {
             bgImage.image = img; bgImage.isHidden = false
         } else { bgImage.image = nil; bgImage.isHidden = true }
         keys.theme = theme
-        keys.nameGlowEnabled = store[bool: SharedStore.K.nameGlow]
+        keys.nameGlowEnabled = true   // always on (not a user setting)
         bar.theme = theme
         if heightC != nil { ensureHeight() }
         rebuildKeys()
@@ -556,11 +556,7 @@ final class KeyboardViewController: UIInputViewController {
             }
         }
         // after a word: next-word predictions + emoji
-        if previousWord != nil {
-            let next = WordStore.shared.nextWords(context: contextWords())
-            let emo = Array(bar.lastEmoji.prefix(3))
-            if !next.isEmpty || !emo.isEmpty { bar.showSuggestions(next + emo, primary: -1); return }
-        }
+        // after a space the bar goes back to the tools (no next-word suggestions there)
         bar.showToolbar(clipboard: hasFullAccess && (!ClipboardStore.shared.items.isEmpty || ClipboardStore.shared.pending), update: pendingUpdate != nil,
                         secret: hasFullAccess && ChatService.signedInHint && draft == nil)
     }
