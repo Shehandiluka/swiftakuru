@@ -139,6 +139,7 @@ final class KeyboardViewController: UIInputViewController {
         updateAutoCap()
         refreshBar()
         WordStore.shared.reloadIfChanged()
+        updateSeason()
         pendingUpdate = UpdateChecker.cached()
         if hasFullAccess {
             // after the keys are drawn, so a clipboard alert can never leave the keyboard half-built
@@ -601,6 +602,34 @@ final class KeyboardViewController: UIInputViewController {
             r = x.next
         }
         extensionContext?.open(url, completionHandler: nil)
+    }
+
+    // MARK: seasons
+    private lazy var seasonView: SeasonEffectView = {
+        let v = SeasonEffectView()
+        v.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(v, aboveSubview: keys)
+        NSLayoutConstraint.activate([v.topAnchor.constraint(equalTo: keys.topAnchor), v.bottomAnchor.constraint(equalTo: keys.bottomAnchor),
+                                     v.leadingAnchor.constraint(equalTo: keys.leadingAnchor), v.trailingAnchor.constraint(equalTo: keys.trailingAnchor)])
+        return v
+    }()
+
+    func updateSeason() {
+        let s = Season.current()
+        if s == nil && seasonView.season == nil { return }
+        seasonView.show(s)
+        if hasFullAccess { Season.refreshRemoteIfNeeded() }
+        // greet once a day
+        guard let s = s else { return }
+        let key = "seasonGreeted." + s.id
+        let day = Int(Date().timeIntervalSince1970 / 86400)
+        if store.defaults.integer(forKey: key) != day, store.defaults.string(forKey: "seasonPreview") == nil {
+            store.defaults.set(day, forKey: key)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self = self, self.composing.isEmpty, self.panel == nil else { return }
+                self.flash(s.greeting)
+            }
+        }
     }
 
     /// The last (up to 3) finished words before the cursor — the context the language model predicts from.

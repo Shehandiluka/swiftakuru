@@ -88,12 +88,12 @@ final class SuggestionBar: UIView {
                 // Swift Akuru logo: long-press opens the app
                 b.setImage(UIImage(named: "kblogo")?.withRenderingMode(.alwaysOriginal), for: .normal)
                 b.imageView?.contentMode = .scaleAspectFit
-                b.imageEdgeInsets = UIEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
+                b.imageEdgeInsets = UIEdgeInsets(top: 9, left: 9, bottom: 9, right: 9)
                 let lp = UILongPressGestureRecognizer(target: self, action: #selector(longTool(_:)))
                 lp.minimumPressDuration = 0.45
                 b.addGestureRecognizer(lp)
-            } else if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)), for: .normal) } else {
-                b.setTitle(text, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
+            } else if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .regular)), for: .normal) } else {
+                b.setTitle(text, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
             }
             b.tintColor = (id == "settings" && update) ? UIColor.systemOrange : ((id == "ai" || (id == "translate" && ClipboardStore.shared.pending)) ? theme.accent : theme.specialText)
             b.setTitleColor(theme.specialText, for: .normal)

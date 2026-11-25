@@ -51,7 +51,7 @@ final class SharedStore {
             K.layout: "singlish", K.theme: "graphite", K.sound: true, K.haptics: true, K.autoCap: true, K.autocorrect: true,
             K.doubleSpace: true, K.livePreview: true, K.keyHints: true, K.numberRow: false, K.aiProvider: "gemini",
             K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 50.0,
-            K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false, K.nameGlow: true, K.smartTouch: true,
+            K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false, K.nameGlow: true, K.smartTouch: true, K.seasonFx: true,
         ])
         restoreAIKeys()
         restoreSettings()
@@ -84,29 +84,30 @@ final class SharedStore {
         static let doubleSpace = "doubleSpace", livePreview = "livePreview", keyHints = "keyHints", numberRow = "numberRow"
         static let aiProvider = "aiProvider", aiKeyGemini = "aiKeyGemini", aiKeyOpenAI = "aiKeyOpenAI", aiModelGemini = "aiModelGemini", aiModelOpenAI = "aiModelOpenAI"
         static let clipboardMax = "clipboardMax", keyHeight = "keyHeight", shortcuts = "shortcuts", emojiSuggest = "emojiSuggest", learnWords = "learnWords"
-        static let recentEmoji = "recentEmoji", customBg = "customBg", clipAuto = "clipAuto", nameGlow = "nameGlow", smartTouch = "smartTouch"
+        static let recentEmoji = "recentEmoji", customBg = "customBg", clipAuto = "clipAuto", nameGlow = "nameGlow", smartTouch = "smartTouch", seasonFx = "seasonFx"
     }
 
     subscript(bool key: String) -> Bool {
         get { defaults.bool(forKey: key) }
-        set { defaults.set(newValue, forKey: key) }
+        set { defaults.set(newValue, forKey: key); settingChanged(key) }
     }
     subscript(string key: String) -> String {
         get { defaults.string(forKey: key) ?? "" }
         set {
             defaults.set(newValue, forKey: key)
             if SharedStore.secretKeys.contains(key) { keychainSave(newValue, key) }
+            settingChanged(key)
         }
     }
     var layout: String { get { self[string: K.layout] } set { self[string: K.layout] = newValue } }
     var themeId: String { get { self[string: K.theme] } set { self[string: K.theme] = newValue } }
-    var keyHeight: Double { get { defaults.double(forKey: K.keyHeight) } set { defaults.set(newValue, forKey: K.keyHeight) } }
+    var keyHeight: Double { get { defaults.double(forKey: K.keyHeight) } set { defaults.set(newValue, forKey: K.keyHeight); settingChanged(K.keyHeight) } }
     var clipboardMax: Int { max(5, defaults.integer(forKey: K.clipboardMax)) }
 
     /// text shortcuts: "@@" → "me@mail.com"
     var shortcuts: [String: String] {
         get { (defaults.dictionary(forKey: K.shortcuts) as? [String: String]) ?? ["@@": "contact@swiftpaypos.store", "omw": "On my way!", "gm": "Good morning! ☀️", "gn": "Good night 🌙", "thx": "ස්තුතියි! 🙏"] }
-        set { defaults.set(newValue, forKey: K.shortcuts) }
+        set { defaults.set(newValue, forKey: K.shortcuts); settingChanged(K.shortcuts) }
     }
     var recentEmoji: [String] {
         get { defaults.stringArray(forKey: K.recentEmoji) ?? [] }
@@ -131,10 +132,12 @@ final class SharedStore {
             if value.isEmpty { SecItemDelete(q as CFDictionary); continue }
             let attrs: [String: Any] = [kSecValueData as String: Data(value.utf8),
                                         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock]
-            if SecItemUpdate(q as CFDictionary, attrs as CFDictionary) == errSecItemNotFound {
+            var st = SecItemUpdate(q as CFDictionary, attrs as CFDictionary)
+            if st == errSecItemNotFound {
                 var add = q; for (k, v) in attrs { add[k] = v }
-                SecItemAdd(add as CFDictionary, nil)
+                st = SecItemAdd(add as CFDictionary, nil)
             }
+            defaults.set(Int(st), forKey: "diag.keychain")   // 0 = OK (shown in Keyboard health)
         }
     }
     private func keychainLoad(_ account: String) -> String? {
@@ -152,30 +155,55 @@ final class SharedStore {
     /// Every keyboard setting that should survive an update (AI keys are kept separately above).
     static let settingKeys = [K.layout, K.theme, K.sound, K.haptics, K.autoCap, K.autocorrect, K.doubleSpace, K.livePreview, K.keyHints,
                               K.numberRow, K.aiProvider, K.aiModelGemini, K.aiModelOpenAI, K.clipboardMax, K.keyHeight, K.shortcuts,
-                              K.emojiSuggest, K.learnWords, K.clipAuto, K.nameGlow, K.smartTouch]
+                              K.emojiSuggest, K.learnWords, K.clipAuto, K.nameGlow, K.smartTouch, K.seasonFx]
     private static let settingsAccount = "settings.v1"
     private static let settingsMarker = "settingsRestoreChecked"
 
-    /// Saves the current settings to the Keychain, so a re-signed update that starts with empty settings gets them back.
+    private var backupWork: DispatchWorkItem?
+    /// Any setting changed → save a backup copy shortly after (debounced).
+    private func settingChanged(_ key: String) {
+        guard SharedStore.settingKeys.contains(key) else { return }
+        backupWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.backupSettings() }
+        backupWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: w)
+    }
+
+    /// Backup copies of the settings, so an update never resets them. Kept in 3 places, because which ones survive
+    /// depends on how the app was installed: the Keychain, this app's own (private) settings and a file.
+    private var backupFiles: [URL] {
+        var out = [containerURL.appendingPathComponent("settings-backup.plist")]
+        if let a = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            out.append(a.appendingPathComponent("SwiftAkuru-settings-backup.plist"))
+        }
+        return out
+    }
     func backupSettings() {
         var snap: [String: Any] = [:]
         for k in SharedStore.settingKeys { if let v = defaults.object(forKey: k) { snap[k] = v } }
+        snap["savedAt"] = Date().timeIntervalSince1970
         guard PropertyListSerialization.propertyList(snap, isValidFor: .binary),
               let d = try? PropertyListSerialization.data(fromPropertyList: snap, format: .binary, options: 0) else { return }
-        let b64 = d.base64EncodedString()
-        // only touch the Keychain when something actually changed
-        let h = String(b64.hashValue)
-        guard defaults.string(forKey: "settingsBackupHash") != h else { return }
-        defaults.set(h, forKey: "settingsBackupHash")
-        keychainSave(b64, SharedStore.settingsAccount)
+        keychainSave(d.base64EncodedString(), SharedStore.settingsAccount)
+        UserDefaults.standard.set(d, forKey: "settingsSnapshot")
+        for u in backupFiles {
+            try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? d.write(to: u, options: .atomic)
+        }
+        defaults.set(Date().timeIntervalSince1970, forKey: "diag.backupAt")
     }
     private func restoreSettings() {
         defer { defaults.set(true, forKey: SharedStore.settingsMarker) }
         guard !defaults.bool(forKey: SharedStore.settingsMarker) else { return }   // these settings were already in use
-        // a fresh settings store (new install or new App Group after an update): bring back the saved settings
-        guard let b = keychainLoad(SharedStore.settingsAccount), let d = Data(base64Encoded: b),
-              let snap = (try? PropertyListSerialization.propertyList(from: d, options: [], format: nil)) as? [String: Any] else { return }
-        for (k, v) in snap where SharedStore.settingKeys.contains(k) { defaults.set(v, forKey: k) }
+        // a fresh settings store (new install or new App Group after an update): bring back the newest backup
+        var blobs: [Data] = []
+        if let b = keychainLoad(SharedStore.settingsAccount), let d = Data(base64Encoded: b) { blobs.append(d) }
+        if let d = UserDefaults.standard.data(forKey: "settingsSnapshot") { blobs.append(d) }
+        for u in backupFiles { if let d = try? Data(contentsOf: u) { blobs.append(d) } }
+        let snaps = blobs.compactMap { (try? PropertyListSerialization.propertyList(from: $0, options: [], format: nil)) as? [String: Any] }
+        guard let best = snaps.max(by: { ($0["savedAt"] as? Double ?? 0) < ($1["savedAt"] as? Double ?? 0) }) else { return }
+        for (k, v) in best where SharedStore.settingKeys.contains(k) { defaults.set(v, forKey: k) }
+        defaults.set(Date().timeIntervalSince1970, forKey: "diag.restoredAt")
     }
     /// Call after an API key changes (the app's settings screen writes defaults directly).
     func backupAIKeys() {

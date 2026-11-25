@@ -32,7 +32,11 @@ enum KBDiag {
     static func memoryWarning() { d.set(d.integer(forKey: "diag.memWarn") + 1, forKey: "diag.memWarn") }
 
     static var report: [(String, String)] {
-        [("App Group", SharedStore.shared.activeGroup.map { String($0.suffix(28)) } ?? "❌ නැහැ (app ↔ keyboard වෙන වෙනම)"),
+        [("Install", (Bundle.main.object(forInfoDictionaryKey: "ALTDeviceID") != nil || hostInfo("ALTDeviceID") != nil) ? "SideStore / AltStore" : "වෙනත් (3uTools / ad-hoc)"),
+         ("Bundle", String((Bundle.main.bundleIdentifier ?? "?").suffix(32))),
+         ("App Group", SharedStore.shared.activeGroup.map { String($0.suffix(28)) } ?? "❌ නැහැ (app ↔ keyboard වෙන වෙනම)"),
+         ("Keychain", d.object(forKey: "diag.keychain") == nil ? "—" : (d.integer(forKey: "diag.keychain") == 0 ? "✓ OK" : "❌ \(d.integer(forKey: "diag.keychain"))")),
+         ("Settings backup", d.double(forKey: "diag.backupAt") > 0 ? fmt(d.double(forKey: "diag.backupAt")) : "—"),
          ("Keyboard open වුණ වාර", "\(d.integer(forKey: "diag.launches"))"),
          ("හිස්ව ආව වාර (ඇස්තමේන්තුව)", "\(d.integer(forKey: "diag.blank"))"),
          ("අන්තිම හිස් වීම", d.string(forKey: "diag.lastBlank") ?? "—"),
@@ -41,6 +45,12 @@ enum KBDiag {
          ("පටන් ගන්න ගිය වෙලාව", String(format: "%.2f s", d.double(forKey: "diag.startSec")))]
     }
     static func reset() { for k in ["diag.launches", "diag.blank", "diag.lastBlank", "diag.memWarn", "diag.mem", "diag.memMax", "diag.startSec"] { d.removeObject(forKey: k) } }
+
+    private static func hostInfo(_ key: String) -> Any? {
+        let u = Bundle.main.bundleURL
+        guard u.pathExtension == "appex", let host = Bundle(url: u.deletingLastPathComponent().deletingLastPathComponent()) else { return nil }
+        return host.object(forInfoDictionaryKey: key)
+    }
 
     private static func fmt(_ t: Double) -> String {
         let f = DateFormatter(); f.dateFormat = "MMM d HH:mm"
