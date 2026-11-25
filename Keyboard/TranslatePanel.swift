@@ -250,10 +250,17 @@ final class TranslatePanel: UIView, ThemedPanel {
         for (i, l) in Translator.ordered.enumerated() {
             if i % 3 == 0 {
                 let r = UIStackView(); r.axis = .horizontal; r.spacing = 6; r.distribution = .fillEqually
-                r.heightAnchor.constraint(equalToConstant: 34).isActive = true
+                r.heightAnchor.constraint(equalToConstant: 42).isActive = true
                 pickerStack.addArrangedSubview(r); row = r
             }
             let b = pill(l.native, theme: theme, filled: l == current, size: 14)
+            // the language in its own script + the country in English underneath
+            let t = NSMutableAttributedString(string: l.native + "\n", attributes: [.font: UIFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: l == current ? UIColor.white : theme.keyText])
+            t.append(NSAttributedString(string: l.country, attributes: [.font: UIFont.systemFont(ofSize: 10), .foregroundColor: l == current ? UIColor.white.withAlphaComponent(0.85) : theme.hint]))
+            b.setAttributedTitle(t, for: .normal)
+            b.titleLabel?.numberOfLines = 2
+            b.titleLabel?.textAlignment = .center
+            b.titleLabel?.adjustsFontSizeToFitWidth = true
             b.tag = i
             b.addTarget(self, action: #selector(choose(_:)), for: .touchUpInside)
             row?.addArrangedSubview(b)
