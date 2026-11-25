@@ -71,7 +71,7 @@ struct HomeView: View {
                 Spacer()
                 NavigationLink { AccountView() } label: {
                     if let p = acc.profile, acc.signedIn {
-                        Avatar(url: p.picture, name: p.name ?? "?", size: 40).overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1.5))
+                        WebAvatar(url: p.picture, name: p.name ?? "?", size: 40).overlay(Circle().stroke(.white.opacity(0.6), lineWidth: 1.5))
                     } else {
                         Text("Sign in").font(.subheadline.bold()).foregroundStyle(.white)
                             .padding(.horizontal, 14).padding(.vertical, 8).background(.white.opacity(0.18)).clipShape(Capsule())

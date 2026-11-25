@@ -144,7 +144,7 @@ struct AccountView: View {
             if let p = acc.profile, acc.signedIn {
                 Section {
                     HStack(spacing: 14) {
-                        Avatar(url: p.picture, name: p.name ?? "?", size: 58)
+                        WebAvatar(url: p.picture, name: p.name ?? "?", size: 58)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(p.name ?? "").font(.title3.bold())
                             Text(p.email ?? "").font(.subheadline).foregroundStyle(.secondary)
@@ -189,7 +189,7 @@ struct AccountView: View {
     }
 }
 
-struct Avatar: View {
+struct WebAvatar: View {
     let url: String?; let name: String; let size: CGFloat
     var body: some View {
         Group {
