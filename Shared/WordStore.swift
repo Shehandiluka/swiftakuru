@@ -220,7 +220,7 @@ final class WordStore {
 
         func base(_ w: String) -> Double {
             var s = 0.0
-            s += max(0, log2(lmP(w)) + 16) * 0.5   // how likely this word is here (frequency + the words before it)
+            s += Swift.max(0, log2(lmP(w)) + 16) * 0.5   // how likely this word is here (frequency + the words before it)
             if let d = data.lastDay[w] { s += t - d <= 1 ? 1.0 : (t - d <= 7 ? 0.5 : 0) }
             if builtinSet.contains(w) { s += 0.6 }
             return s
