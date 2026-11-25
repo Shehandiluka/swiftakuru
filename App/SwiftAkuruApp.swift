@@ -307,6 +307,8 @@ struct MoreView: View {
     @State private var words: [(String, Int)] = Array(WordStore.shared.learnedList.prefix(300))
     @State private var checking = false
     @State private var checkMsg = ""
+    @State private var teach = ""
+    @State private var teachMsg = ""
     var body: some View {
         Group {
             List {
@@ -319,6 +321,24 @@ struct MoreView: View {
                         Button("Add") { guard !newKey.isEmpty, !newText.isEmpty else { return }; shortcuts.append((newKey, newText)); newKey = ""; newText = ""; save() }
                     }
                 } header: { Text("Text shortcuts") } footer: { Text("Shortcut එක type කරලා space ඔබන්න.") }
+                Section {
+                    let st = WordStore.shared.stats
+                    Text("වචන \(st.words) · වචන යුගල \(st.pairs) · ඉගෙනගත් spellings \(st.spellings)").font(.footnote).foregroundStyle(.secondary)
+                    TextField("ඔයාගේම පරණ chats / notes මෙතන paste කරන්න…", text: $teach, axis: .vertical).lineLimit(3...8)
+                    HStack {
+                        Button { if let t = UIPasteboard.general.string { teach = t } } label: { Label("Paste", systemImage: "doc.on.clipboard") }
+                        Spacer()
+                        Button {
+                            let n = WordStore.shared.learn(fromText: teach)
+                            teachMsg = "✓ වචන \(n)ක් ඉගෙනගත්තා"
+                            teach = ""
+                            words = Array(WordStore.shared.learnedList.prefix(300))
+                        } label: { Label("ඉගැන්නන්න", systemImage: "brain") }.disabled(teach.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }.buttonStyle(.borderless)
+                    if !teachMsg.isEmpty { Text(teachMsg).font(.footnote).foregroundStyle(.green) }
+                } header: { Text("🧠 Keyboard එකට ඉගැන්නන්න") } footer: {
+                    Text("Keyboard එක ඔයා type කරන විදියෙන්ම හැමදාම ඉගෙනගන්නවා: suggestion එකක් තෝරපු ගමන් ඒ spelling එකට ඊළඟ පාර ඒක මුලින්ම එනවා, එක වචනෙකට පස්සේ ඔයා ලියන වචන ඊළඟට පෙන්නනවා. මේකෙන් එකපාරම ගොඩක් ඉගැන්නන්න පුළුවන් (WhatsApp → Export chat → text එක copy කරලා). හැමදේම phone එකේ විතරයි.")
+                }
                 Section("ඉගෙනගත් වචන (\(words.count))") {
                     ForEach(words.indices, id: \.self) { k in let w = words[k]; HStack { Text(w.0); Spacer(); Text("\(w.1)").foregroundStyle(.secondary) } }
                         .onDelete { idx in for i in idx { WordStore.shared.forget(words[i].0) }; words.remove(atOffsets: idx) }

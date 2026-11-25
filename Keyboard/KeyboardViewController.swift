@@ -121,6 +121,7 @@ final class KeyboardViewController: UIInputViewController {
         if ([.numberPad, .decimalPad, .phonePad, .asciiCapableNumberPad] as [UIKeyboardType]).contains(kt) { page = .numbers; rebuildKeys() }
         updateAutoCap()
         refreshBar()
+        WordStore.shared.reloadIfChanged()
         pendingUpdate = UpdateChecker.cached()
         if hasFullAccess {
             // after the keys are drawn, so a clipboard alert can never leave the keyboard half-built
@@ -300,16 +301,21 @@ final class KeyboardViewController: UIInputViewController {
     // The Sinhala word being typed is inserted as normal text and replaced in place on every key.
     // (Marked text behaves differently in each app — in some, the following space landed before the word.)
     func updateComposition() {
-        let si = Singlish.convert(composing)
+        refreshBar()   // works out the best word for this spelling (what you taught it, else the direct conversion)
+        let si = bestFor?.roman == composing ? bestFor!.word : Singlish.convert(composing)
         if live { replaceTail(old: composedShown, with: si); composedShown = si }
-        refreshBar()
     }
 
-    func commitComposition(word: String? = nil) {
+    /// The word space would type for the current Singlish (learned best word, else the direct conversion).
+    private var bestFor: (roman: String, word: String)?
+
+    func commitComposition(word: String? = nil, chosen: Bool = false) {
         guard !composing.isEmpty else { return }
-        let w = word ?? Singlish.convert(composing)
+        let best = bestFor?.roman == composing ? bestFor?.word : nil
+        let w = word ?? best ?? Singlish.convert(composing)
         if live { replaceTail(old: composedShown, with: w) } else { input.insertText(w) }
-        WordStore.shared.learn(w, roman: composing, previous: previousWord)
+        WordStore.shared.learn(w, roman: composing, previous: previousWord, chosen: chosen, rejected: chosen ? best : nil)
+        bestFor = nil
         previousWord = w
         composing = ""
         composedShown = ""
@@ -505,9 +511,12 @@ final class KeyboardViewController: UIInputViewController {
     func refreshBar() {
         if panel != nil { return }
         if !composing.isEmpty {
-            var list = WordStore.shared.sinhalaSuggestions(roman: composing)
-            if store[bool: SharedStore.K.emojiSuggest] { list += EmojiData.suggestions(for: composing).prefix(2) }
-            bar.showSuggestions(list, primary: 0)
+            let sug = WordStore.shared.sinhalaSuggestions(roman: composing, previous: previousWord)
+            var list = sug.list, primary = sug.primary
+            if list.isEmpty { primary = -1 }
+            bestFor = list.first.map { (composing, $0) }
+            if list.count < 3, store[bool: SharedStore.K.emojiSuggest] { list += EmojiData.suggestions(for: composing).prefix(3 - list.count) }
+            bar.showSuggestions(list, primary: primary)
             return
         }
         if !singlish, page == .letters {
@@ -537,7 +546,7 @@ final class KeyboardViewController: UIInputViewController {
         let isEmoji = s.unicodeScalars.first.map { $0.properties.isEmojiPresentation || $0.properties.isEmoji && $0.value > 0x2000 } ?? false
         if !composing.isEmpty {
             if isEmoji { commitComposition(); input.insertText(" " + s); refreshBar(); return }
-            commitComposition(word: s)
+            commitComposition(word: s, chosen: s != bestFor?.word)
             input.insertText(" ")
             lastSpaceTime = Date()
             bar.lastEmoji = []
@@ -559,11 +568,30 @@ final class KeyboardViewController: UIInputViewController {
         refreshBar()
     }
 
+    /// Opens the Swift Akuru app (keyboards have no official API for this; this walks to the app object).
+    func openContainingApp() {
+        guard let url = URL(string: "swiftakuru://open") else { return }
+        let sel = NSSelectorFromString("openURL:options:completionHandler:")
+        var r: UIResponder? = self
+        while let x = r {
+            if x.responds(to: sel), String(describing: type(of: x)).contains("Application") {
+                typealias Open = @convention(c) (AnyObject, Selector, NSURL, NSDictionary, AnyObject?) -> Void
+                let f = unsafeBitCast(x.method(for: sel), to: Open.self)
+                f(x, sel, url as NSURL, NSDictionary(), nil)
+                return
+            }
+            r = x.next
+        }
+        extensionContext?.open(url, completionHandler: nil)
+    }
+
     // MARK: toolbar & panels
     private func tool(_ t: String) {
         feedbackTick()
         switch t {
         case "emoji": showPanel(EmojiPanel(kb: self))
+        case "logo": flash("Swift Akuru app එකට යන්න logo එක ඔබාගෙන ඉන්න")
+        case "logo.long": openContainingApp()
         case "clipboard": showPanel(ClipboardPanel(kb: self))
         case "ai": showPanel(AIPanel(kb: self))
         case "translate": showPanel(TranslatePanel(kb: self))

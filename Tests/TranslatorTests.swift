@@ -36,3 +36,26 @@ final class TranslatorTests: XCTestCase {
         XCTAssertEqual(Translator.mime(forExtension: "M4A"), "audio/mp4")
     }
 }
+
+final class LearningTests: XCTestCase {
+    func testPickedWordBecomesFirstForThatSpelling() {
+        let ws = WordStore.shared
+        ws.forgetAll()
+        SharedStore.shared[bool: SharedStore.K.learnWords] = true
+        let direct = Singlish.convert("kohomada")
+        XCTAssertEqual(ws.sinhalaSuggestions(roman: "kohomada").list.first, direct)
+        // the user taps a different suggestion for this spelling
+        ws.learn("කොහොමද", roman: "kohomada", previous: nil, chosen: true, rejected: direct)
+        let r = ws.sinhalaSuggestions(roman: "kohomada")
+        XCTAssertEqual(r.list.first, "කොහොමද")
+        XCTAssertLessThanOrEqual(r.list.count, 3)
+    }
+    func testNextWordPrediction() {
+        let ws = WordStore.shared
+        ws.forgetAll()
+        SharedStore.shared[bool: SharedStore.K.learnWords] = true
+        ws.learn(fromText: "සුබ උදෑසනක් වේවා\nසුබ උදෑසනක් මචං\nසුබ රාත්‍රියක්")
+        XCTAssertEqual(ws.nextWords(after: "සුබ").first, "උදෑසනක්")
+        ws.forgetAll()
+    }
+}

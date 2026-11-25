@@ -78,13 +78,21 @@ final class SuggestionBar: UIView {
         items = []
         stack.distribution = .fillEqually
         let tools: [(String, String?, String)] = [
-            ("emoji", "face.smiling", ""), ("clipboard", clipboard ? "doc.on.clipboard.fill" : "doc.on.clipboard", ""), ("ai", "sparkles", ""),
+            ("logo", nil, ""), ("clipboard", clipboard ? "doc.on.clipboard.fill" : "doc.on.clipboard", ""), ("ai", "sparkles", ""),
             ("translate", "character.bubble", ""),
             ("sinhala", nil, "අ"), ("settings", update ? "arrow.down.circle.fill" : "gearshape", ""), ("hide", "keyboard.chevron.compact.down", ""),
         ].flatMap { t -> [(String, String?, String)] in t.0 == "settings" && secret ? [("secret", "lock", ""), t] : [t] }
         for (id, sym, text) in tools {
             let b = UIButton(type: .system)
-            if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)), for: .normal) } else {
+            if id == "logo" {
+                // Swift Akuru logo: long-press opens the app
+                b.setImage(UIImage(named: "kblogo")?.withRenderingMode(.alwaysOriginal), for: .normal)
+                b.imageView?.contentMode = .scaleAspectFit
+                b.imageEdgeInsets = UIEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
+                let lp = UILongPressGestureRecognizer(target: self, action: #selector(longTool(_:)))
+                lp.minimumPressDuration = 0.45
+                b.addGestureRecognizer(lp)
+            } else if let s = sym { b.setImage(UIImage(systemName: s, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)), for: .normal) } else {
                 b.setTitle(text, for: .normal); b.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
             }
             b.tintColor = (id == "settings" && update) ? UIColor.systemOrange : ((id == "ai" || (id == "translate" && ClipboardStore.shared.pending)) ? theme.accent : theme.specialText)
@@ -97,6 +105,10 @@ final class SuggestionBar: UIView {
     }
 
     @objc private func tapTool(_ b: UIButton) { if let id = b.accessibilityIdentifier { onTool?(id) } }
+    @objc private func longTool(_ g: UILongPressGestureRecognizer) {
+        guard g.state == .began, let id = (g.view as? UIButton)?.accessibilityIdentifier else { return }
+        onTool?(id + ".long")
+    }
 
     func showTitle(_ title: String, back: @escaping () -> Void) {
         clear()

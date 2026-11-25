@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.4.2"
+    MARKETING_VERSION: "1.5.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""            # put your Apple Team ID here when you have a paid account
     CODE_SIGN_STYLE: Automatic
@@ -42,6 +42,9 @@ targets:
         NSPhotoLibraryUsageDescription: Keyboard background එකට photo එකක් තෝරන්න.
         NSFaceIDUsageDescription: Secret Chats Face ID එකෙන් විවෘත කරන්න.
         NSMicrophoneUsageDescription: Chat එකේ voice messages record කරන්න.
+        CFBundleURLTypes:
+          - CFBundleURLName: store.swiftpaypos.swiftakuru
+            CFBundleURLSchemes: [swiftakuru]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru

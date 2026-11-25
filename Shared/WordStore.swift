@@ -7,62 +7,134 @@ import UIKit
 final class WordStore {
     static let shared = WordStore()
 
+    /// Everything learned on this phone. Nothing leaves the device.
     struct Model: Codable {
-        var words: [String: Int] = [:]        // learned word → count
-        var bigrams: [String: [String: Int]] = [:] // previous word → next word → count
-        var romanOf: [String: String] = [:]   // learned Sinhala word → the roman the user typed
+        var words: [String: Int] = [:]               // word → times used
+        var bigrams: [String: [String: Int]] = [:]   // previous word → next word → count
+        var romanOf: [String: String] = [:]          // Sinhala word → roman the user typed last
+        var picks: [String: [String: Int]] = [:]     // roman typed → Sinhala word chosen → strength
+        var lastDay: [String: Int] = [:]             // word → day it was last used (recency)
+        var trigrams: [String: [String: Int]] = [:]  // "w1 w2" → next word → count
+
+        init() {}
+        init(from d: Decoder) throws {
+            let c = try d.container(keyedBy: CodingKeys.self)
+            words = try c.decodeIfPresent([String: Int].self, forKey: .words) ?? [:]
+            bigrams = try c.decodeIfPresent([String: [String: Int]].self, forKey: .bigrams) ?? [:]
+            romanOf = try c.decodeIfPresent([String: String].self, forKey: .romanOf) ?? [:]
+            picks = try c.decodeIfPresent([String: [String: Int]].self, forKey: .picks) ?? [:]
+            lastDay = try c.decodeIfPresent([String: Int].self, forKey: .lastDay) ?? [:]
+            trigrams = try c.decodeIfPresent([String: [String: Int]].self, forKey: .trigrams) ?? [:]
+        }
     }
 
     private(set) var data = Model()
-    private var siBuiltin: [(word: String, skel: String)] = []
+    /// Built-in Sinhala words sorted by skeleton, for fast prefix lookups (binary search).
+    private var builtin: [(skel: String, word: String)] = []
+    private var builtinSet: Set<String> = []
     private var dirty = false
     private var skelCache: [String: String] = [:]
     private func skeleton(_ w: String) -> String {
         if let s = skelCache[w] { return s }
         let s = Singlish.sinhalaSkeleton(w)
+        if skelCache.count > 20000 { skelCache.removeAll(keepingCapacity: true) }
         skelCache[w] = s
         return s
     }
     private let url = SharedStore.shared.fileURL("words.json")
     private let q = DispatchQueue(label: "wordstore")
+    private var prevPrev: String?
+    private static var today: Int { Int(Date().timeIntervalSince1970 / 86400) }
+
+    private var loadedAt: Date?
+    private func fileDate() -> Date? { (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date }
+    /// The app may have taught new words while the keyboard was closed — pick them up (cheap date check).
+    func reloadIfChanged() {
+        guard !dirty, let d = fileDate(), d != loadedAt else { return }
+        q.async { [url] in
+            guard let raw = try? Data(contentsOf: url), let m = try? JSONDecoder().decode(Model.self, from: raw) else { return }
+            DispatchQueue.main.async { if !self.dirty { self.data = m; self.loadedAt = d } }
+        }
+    }
 
     private init() {
         if let d = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(Model.self, from: d) { data = decoded }
-        let bundles = [Bundle.main, Bundle(for: WordStore.self)]
-        for b in bundles {
+        loadedAt = fileDate()
+        for b in [Bundle.main, Bundle(for: WordStore.self)] {
             if let u = b.url(forResource: "words_si", withExtension: "txt"), let text = try? String(contentsOf: u, encoding: .utf8) {
-                siBuiltin = text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.map { (word: $0, skel: Singlish.sinhalaSkeleton($0)) }
+                let list = text.split(separator: "\n").map { String($0).trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                builtin = list.map { (skel: Singlish.sinhalaSkeleton($0), word: $0) }.sorted { $0.skel < $1.skel }
+                builtinSet = Set(list)
                 break
             }
         }
     }
 
+    static func clean(_ w: String) -> String { w.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters).union(.symbols)) }
+
     // MARK: learning
-    func learn(_ word: String, roman: String? = nil, previous: String?) {
+    /// Called for every word you finish. `chosen` = you tapped this suggestion instead of the first one
+    /// (a strong signal); `rejected` = the suggestion you skipped (it is ranked lower for that spelling next time).
+    func learn(_ word: String, roman: String? = nil, previous: String?, chosen: Bool = false, rejected: String? = nil) {
         guard SharedStore.shared[bool: SharedStore.K.learnWords] else { return }
-        let w = word.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-        guard w.count >= 2, w.count <= 40 else { return }
-        data.words[w, default: 0] += 1
-        if let r = roman, Singlish.isSinhala(w) { data.romanOf[w] = r }
-        if let p = previous?.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters)), !p.isEmpty {
-            data.bigrams[p, default: [:]][w, default: 0] += 1
+        let w = WordStore.clean(word)
+        guard w.count >= 1, w.count <= 40 else { return }
+        data.words[w, default: 0] += chosen ? 3 : 1
+        data.lastDay[w] = WordStore.today
+        if let r = roman?.lowercased(), !r.isEmpty, Singlish.isSinhala(w) {
+            data.romanOf[w] = r
+            data.picks[r, default: [:]][w, default: 0] += chosen ? 4 : 1
+            if let rj = rejected, rj != w, let v = data.picks[r]?[rj] { data.picks[r]?[rj] = max(0, v - 2) }
         }
-        if data.words.count > 8000 { prune() }
+        let p = previous.map(WordStore.clean) ?? ""
+        if !p.isEmpty {
+            data.bigrams[p, default: [:]][w, default: 0] += 1
+            if let pp = prevPrev, !pp.isEmpty { data.trigrams[pp + " " + p, default: [:]][w, default: 0] += 1 }
+        }
+        prevPrev = p.isEmpty ? nil : p
+        if data.words.count > 9000 { prune() }
         dirty = true
         scheduleSave()
     }
 
+    /// "Train" from your own text (old chats, notes): learns words and which word follows which.
+    @discardableResult
+    func learn(fromText text: String) -> Int {
+        var n = 0
+        for line in text.components(separatedBy: .newlines) {
+            var prev: String?
+            prevPrev = nil
+            for raw in line.split(whereSeparator: { $0.isWhitespace }) {
+                let w = WordStore.clean(String(raw))
+                guard w.count >= 1, w.count <= 40, !w.allSatisfy({ $0.isNumber }) else { prev = nil; continue }
+                learn(w, previous: prev)
+                prev = w; n += 1
+            }
+        }
+        save()
+        return n
+    }
+
     func forget(_ word: String) {
-        data.words.removeValue(forKey: word); data.romanOf.removeValue(forKey: word); data.bigrams.removeValue(forKey: word)
+        data.words.removeValue(forKey: word); data.romanOf.removeValue(forKey: word); data.bigrams.removeValue(forKey: word); data.lastDay.removeValue(forKey: word)
         for k in data.bigrams.keys { data.bigrams[k]?.removeValue(forKey: word) }
+        for k in data.picks.keys { data.picks[k]?.removeValue(forKey: word) }
+        for k in data.trigrams.keys { data.trigrams[k]?.removeValue(forKey: word) }
         dirty = true; save()
     }
     func forgetAll() { data = Model(); dirty = true; save() }
 
     private func prune() {
-        let keep = data.words.sorted { $0.value > $1.value }.prefix(6000)
-        data.words = Dictionary(uniqueKeysWithValues: keep.map { ($0.key, $0.value) })
-        data.bigrams = data.bigrams.filter { data.words[$0.key] != nil }
+        // keep what you use often or used recently
+        let t = WordStore.today
+        let scored = data.words.map { ($0.key, Double($0.value) + 30.0 / Double(max(1, t - (data.lastDay[$0.key] ?? 0)))) }
+        let keep = Set(scored.sorted { $0.1 > $1.1 }.prefix(7000).map { $0.0 })
+        data.words = data.words.filter { keep.contains($0.key) }
+        data.lastDay = data.lastDay.filter { keep.contains($0.key) }
+        data.romanOf = data.romanOf.filter { keep.contains($0.key) }
+        data.bigrams = data.bigrams.filter { keep.contains($0.key) }
+        if data.trigrams.count > 6000 { data.trigrams = Dictionary(uniqueKeysWithValues: data.trigrams.sorted { $0.value.values.reduce(0, +) > $1.value.values.reduce(0, +) }.prefix(4000).map { ($0.key, $0.value) }) }
+        if data.picks.count > 6000 { data.picks = Dictionary(uniqueKeysWithValues: data.picks.sorted { $0.value.values.reduce(0, +) > $1.value.values.reduce(0, +) }.prefix(4000).map { ($0.key, $0.value) }) }
     }
 
     private var saveWork: DispatchWorkItem?
@@ -76,47 +148,92 @@ final class WordStore {
         guard dirty else { return }
         dirty = false
         let snapshot = data
-        q.async { [url] in
+        q.async { [url, weak self] in
             if let d = try? JSONEncoder().encode(snapshot) { try? d.write(to: url, options: .atomic) }
+            let date = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+            DispatchQueue.main.async { self?.loadedAt = date }
         }
     }
 
-    // MARK: suggestions
-    /// Sinhala suggestions for a roman word being typed. First item is the direct conversion.
-    func sinhalaSuggestions(roman: String, max: Int = 6) -> [String] {
-        guard !roman.isEmpty else { return [] }
-        let direct = Singlish.convert(roman)
-        var out = [direct]
-        var seen: Set<String> = [direct]
-        let skel = Singlish.romanSkeleton(roman)
-        let variants = Singlish.variants(roman)
+    var stats: (words: Int, pairs: Int, spellings: Int) {
+        (data.words.count, data.bigrams.values.reduce(0) { $0 + $1.count }, data.picks.count)
+    }
 
-        var scored: [(String, Double)] = []
-        // learned words: typed with exactly this roman before → strongest
-        for (w, r) in data.romanOf where r.lowercased().hasPrefix(roman.lowercased()) {
-            scored.append((w, 1000 + Double(data.words[w] ?? 1) - Double(r.count - roman.count)))
+    // MARK: suggestions
+    /// Sinhala suggestions for a roman word being typed, best first.
+    /// Three things are mixed into one score: (1) what YOU chose for this spelling before,
+    /// (2) the words around it (what you usually write after the previous word),
+    /// (3) the dictionary + your vocabulary (spelling match, how often and how recently used).
+    /// `primary` is the word space will type: the direct conversion, unless you have clearly taught a better one.
+    func sinhalaSuggestions(roman: String, previous: String? = nil, max: Int = 3) -> (list: [String], primary: Int) {
+        guard !roman.isEmpty else { return ([], -1) }
+        let r = roman.lowercased()
+        let direct = Singlish.convert(roman)
+        let skel = Singlish.romanSkeleton(roman)
+        let prev = previous.map(WordStore.clean) ?? ""
+        let ctx = data.bigrams[prev]
+        let ctx3 = prevPrev.flatMap { data.trigrams[$0 + " " + prev] }
+        let t = WordStore.today
+        var score: [String: Double] = [:]
+
+        func base(_ w: String) -> Double {
+            var s = 0.0
+            if let c = data.words[w] { s += 1.6 * log2(1 + Double(c)) }
+            if let d = data.lastDay[w] { s += t - d <= 1 ? 1.2 : (t - d <= 7 ? 0.6 : 0) }
+            if let n = ctx?[w] { s += 2.6 * log2(1 + Double(n)) }
+            if let n = ctx3?[w] { s += 2.0 * log2(1 + Double(n)) }
+            if builtinSet.contains(w) { s += 0.8 }
+            return s
         }
-        // learned + builtin words by fuzzy skeleton prefix
-        for (w, c) in data.words where Singlish.isSinhala(w) {
-            let ws = skeleton(w)
-            if ws == skel { scored.append((w, 500 + Double(c))) } else if ws.hasPrefix(skel) { scored.append((w, 200 + Double(c) - Double(ws.count - skel.count))) }
+        func add(_ w: String, _ s: Double) { score[w] = Swift.max(score[w] ?? -.infinity, s + base(w)) }
+
+        // the direct conversion always takes part
+        add(direct, 3.0)
+        // (1) your own choices for exactly this spelling
+        if let ch = data.picks[r] { for (w, n) in ch where n > 0 { add(w, 3.0 + 2.5 * log2(1 + Double(n))) } }
+        // ...and for spellings that start like this one (you are still typing)
+        if r.count >= 2 {
+            for (w, rr) in data.romanOf where rr.count > r.count && rr.hasPrefix(r) { add(w, 2.2 - 0.25 * Double(rr.count - r.count)) }
         }
-        for (w, ws) in siBuiltin {
-            if ws == skel { scored.append((w, 300)) } else if skel.count >= 2, ws.hasPrefix(skel) { scored.append((w, 100 - Double(ws.count - skel.count))) }
+        // (2) words that usually come next (only if they fit what you are typing)
+        if let c = ctx {
+            for (w, _) in c where Singlish.isSinhala(w) {
+                let ws = skeleton(w)
+                if ws == skel { add(w, 2.0) } else if skel.count >= 2, ws.hasPrefix(skel) { add(w, 1.0 - 0.15 * Double(ws.count - skel.count)) }
+            }
+        }
+        // (3) your vocabulary + the dictionary by sound
+        if skel.count >= 1 {
+            var checked = 0
+            for (w, _) in data.words where Singlish.isSinhala(w) {
+                checked += 1; if checked > 4000 { break }
+                let ws = skeleton(w)
+                if ws == skel { add(w, 2.0) } else if skel.count >= 2, ws.hasPrefix(skel) { add(w, 0.8 - 0.15 * Double(ws.count - skel.count)) }
+            }
+            var i = lowerBound(skel), seen = 0
+            while i < builtin.count, seen < 120, builtin[i].skel.hasPrefix(skel) {
+                let e = builtin[i]
+                add(e.word, e.skel == skel ? 1.6 : 0.5 - 0.12 * Double(e.skel.count - skel.count))
+                i += 1; seen += 1
+            }
         }
         // spelling variants that are real words
-        let known = Set(siBuiltin.map { $0.word }).union(data.words.keys)
-        for v in variants where known.contains(v) { scored.append((v, 400)) }
+        for v in Singlish.variants(roman, limit: 12) where builtinSet.contains(v) || data.words[v] != nil { add(v, 1.8) }
 
-        for (w, _) in scored.sorted(by: { $0.1 > $1.1 }) where !seen.contains(w) {
-            seen.insert(w); out.append(w)
-            if out.count >= max { return out }
-        }
-        for v in variants where !seen.contains(v) {
-            seen.insert(v); out.append(v)
-            if out.count >= max { break }
-        }
-        return out
+        let ranked = score.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key.count < $1.key.count }.map { $0.key }
+        // space types the top word only when you have taught it (picked it for this spelling twice or more)
+        let top = ranked.first ?? direct
+        let taught = (data.picks[r]?[top] ?? 0) >= 2 && (score[top] ?? 0) >= (score[direct] ?? 0) + 1.5
+        let first = taught ? top : direct
+        var out = [first]
+        for w in ranked where w != first { out.append(w); if out.count >= max { break } }
+        return (out, 0)
+    }
+
+    private func lowerBound(_ key: String) -> Int {
+        var lo = 0, hi = builtin.count
+        while lo < hi { let m = (lo + hi) / 2; if builtin[m].skel < key { lo = m + 1 } else { hi = m } }
+        return lo
     }
 
     /// English completions + corrections for a partial word.
@@ -146,10 +263,15 @@ final class WordStore {
         return (Array(out.prefix(max)), correction)
     }
 
+    /// Next-word predictions: your own word pairs/triples, most used first.
     func nextWords(after previous: String, max: Int = 3) -> [String] {
-        let p = previous.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-        guard let m = data.bigrams[p] ?? data.bigrams[p.lowercased()] else { return [] }
-        return m.sorted { $0.value > $1.value }.prefix(max).map { $0.key }
+        let p = WordStore.clean(previous)
+        var score: [String: Double] = [:]
+        if let pp = prevPrev, let m = data.trigrams[pp + " " + p] { for (w, n) in m { score[w, default: 0] += 3 * log2(1 + Double(n)) } }
+        if let m = data.bigrams[p] ?? data.bigrams[p.lowercased()] { for (w, n) in m { score[w, default: 0] += 2 * log2(1 + Double(n)) } }
+        let t = WordStore.today
+        for w in score.keys { if let d = data.lastDay[w], t - d <= 2 { score[w]! += 0.5 } }
+        return score.sorted { $0.value > $1.value }.prefix(max).map { $0.key }
     }
 
     private func matchCase(_ w: String, _ typed: String) -> String {
