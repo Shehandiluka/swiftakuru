@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.9.1"
+    MARKETING_VERSION: "1.10.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""            # put your Apple Team ID here when you have a paid account
     CODE_SIGN_STYLE: Automatic
@@ -19,6 +19,7 @@ targets:
     sources:
       - path: App
       - path: Shared
+        excludes: ["Resources/si_*.tsv"]   # the big dictionary is only needed by the keyboard
       - path: TranslateUI
     dependencies:
       - target: SwiftAkuruKeyboard
@@ -85,6 +86,7 @@ targets:
     sources:
       - path: Share
       - path: Shared
+        excludes: ["Resources/si_*.tsv"]   # the big dictionary is only needed by the keyboard
       - path: TranslateUI
     entitlements:
       path: Share/SwiftAkuruShare.entitlements
@@ -115,6 +117,7 @@ targets:
     sources:
       - path: Tests
       - path: Shared
+        excludes: ["Resources/si_*.tsv"]   # the big dictionary is only needed by the keyboard
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru.tests
