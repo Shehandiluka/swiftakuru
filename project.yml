@@ -7,7 +7,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.9.0"
+    MARKETING_VERSION: "1.9.1"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: ""            # put your Apple Team ID here when you have a paid account
     CODE_SIGN_STYLE: Automatic
@@ -75,6 +75,8 @@ targets:
             RequestsOpenAccess: true
     settings:
       base:
+        STRIP_INSTALLED_PRODUCT: NO     # keep function names so a crash report says where it happened
+        STRIP_SWIFT_SYMBOLS: NO
         PRODUCT_BUNDLE_IDENTIFIER: store.swiftpaypos.swiftakuru.keyboard
         APPLICATION_EXTENSION_API_ONLY: YES
   SwiftAkuruShare:

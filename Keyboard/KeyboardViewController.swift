@@ -64,7 +64,11 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     // MARK: lifecycle
+    private static var crashCatcherOn = false
+    private var laidOut = false
+
     override func viewDidLoad() {
+        if !Self.crashCatcherOn { Self.crashCatcherOn = true; KBDiag.installCrashCatcher() }
         KBDiag.mark("load")
         super.viewDidLoad()
         view.clipsToBounds = false
@@ -172,7 +176,13 @@ final class KeyboardViewController: UIInputViewController {
         super.viewWillDisappear(animated)
     }
 
+    override func viewWillLayoutSubviews() {
+        if !laidOut { KBDiag.mark("layout") }
+        super.viewWillLayoutSubviews()
+    }
+
     override func viewDidLayoutSubviews() {
+        if !laidOut { laidOut = true; KBDiag.mark("laidOut") }
         super.viewDidLayoutSubviews()
         gradient.frame = view.bounds
     }

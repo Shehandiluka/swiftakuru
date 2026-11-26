@@ -446,6 +446,11 @@ final class SettingsPanel: UIView, ThemedPanel {
     required init?(coder: NSCoder) { fatalError() }
     func applyTheme(_ t: KBTheme) { theme = t; stack.arrangedSubviews.forEach { $0.removeFromSuperview() }; build() }
 
+    @objc private func copyHealth() {
+        UIPasteboard.general.string = KBDiag.fullReport
+        kb?.flash("✓ Copy කළා — Claude ට paste කරන්න")
+    }
+
     private func header(_ t: String) {
         let l = UILabel(); l.text = t; l.font = .systemFont(ofSize: 12, weight: .bold); l.textColor = theme.hint
         l.heightAnchor.constraint(equalToConstant: 26).isActive = true
@@ -543,6 +548,10 @@ final class SettingsPanel: UIView, ThemedPanel {
         diag.textColor = theme.specialText
         diag.text = KBDiag.report.map { "\($0.0): \($0.1)" }.joined(separator: "\n") + String(format: "\nදැන් memory: %.0f MB", KBDiag.memoryMB())
         stack.addArrangedSubview(diag)
+        let copy = pill("📋 Health report එක copy කරන්න", theme: theme, filled: true, size: 14)
+        copy.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        copy.addTarget(self, action: #selector(copyHealth), for: .touchUpInside)
+        stack.addArrangedSubview(copy)
         header("FEEDBACK (Full Access ඕන)")
         toggle("Key sound", SharedStore.K.sound)
         toggle("Vibration (haptics)", SharedStore.K.haptics)
