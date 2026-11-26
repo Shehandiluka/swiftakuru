@@ -291,6 +291,7 @@ struct MoreView: View {
                 }
                 Section {
                     ForEach(KBDiag.report, id: \.0) { r in HStack { Text(r.0); Spacer(); Text(r.1).foregroundStyle(.secondary) } }
+                    Button("📋 Report එක copy කරන්න") { UIPasteboard.general.string = KBDiag.fullReport }
                     Button("Reset") { KBDiag.reset(); diagTick += 1 }
                 } header: { Text("🩺 Keyboard health") } footer: {
                     Text("Keyboard එක හිස්ව ආවොත් මේ කොටසේ screenshot එකක් එවන්න — හේතුව හොයාගන්න උදව් වෙනවා.")

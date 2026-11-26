@@ -523,55 +523,30 @@ final class SettingsPanel: UIView, ThemedPanel {
         seg.addTarget(self, action: #selector(sizeChanged(_:)), for: .valueChanged)
         stack.addArrangedSubview(seg)
 
+        header("සිංහල LAYOUT")
+        let lay = UISegmentedControl(items: ["Singlish (amma → අම්මා)", "Wijesekara"])
+        lay.selectedSegmentIndex = store[bool: SharedStore.K.wijesekara] ? 1 : 0
+        lay.selectedSegmentTintColor = theme.accent
+        lay.setTitleTextAttributes([.foregroundColor: theme.keyText, .font: UIFont.systemFont(ofSize: 13)], for: .normal)
+        lay.addTarget(self, action: #selector(layoutChanged(_:)), for: .valueChanged)
+        stack.addArrangedSubview(lay)
+
         header("TYPING")
-        toggle("සිංහල live preview (type කරද්දිම)", SharedStore.K.livePreview)
-        toggle("Keys උඩ සිංහල අකුරු පෙන්නන්න", SharedStore.K.keyHints, rebuild: true)
-        toggle("Number row", SharedStore.K.numberRow, rebuild: true)
         toggle("English auto-correct", SharedStore.K.autocorrect)
         toggle("Auto capital letters", SharedStore.K.autoCap)
         toggle("Space දෙපාරක් = full stop", SharedStore.K.doubleSpace)
+        toggle("Number row", SharedStore.K.numberRow, rebuild: true)
         toggle("Emoji suggestions", SharedStore.K.emojiSuggest)
         toggle("මම type කරන වචන ඉගෙනගන්න", SharedStore.K.learnWords)
-        toggle("සිංහල type කරන්න Wijesekara layout (Singlish වෙනුවට)", SharedStore.K.wijesekara, rebuild: true)
-        toggle("Smart touch (keys දෙකක් අතර ඔබුවම ඊළඟට ඕන අකුර)", SharedStore.K.smartTouch)
-        header("CLIPBOARD")
-        toggle("Copy කරන දේ auto save කරන්න", SharedStore.K.clipAuto)
-        let clipNote = UILabel()
-        clipNote.numberOfLines = 0
-        clipNote.font = .systemFont(ofSize: 12)
-        clipNote.textColor = theme.specialText
-        clipNote.text = "\"Allow Paste\" ආයේ අහන්නේ නැති වෙන්න: iPhone Settings → Swift Akuru → Paste from Other Apps → Allow. ඊට පස්සේ මේක ON කරන්න."
-        stack.addArrangedSubview(clipNote)
-        header("🩺 KEYBOARD HEALTH")
-        let diag = UILabel()
-        diag.numberOfLines = 0
-        diag.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
-        diag.textColor = theme.specialText
-        diag.text = KBDiag.report.map { "\($0.0): \($0.1)" }.joined(separator: "\n") + String(format: "\nදැන් memory: %.0f MB", KBDiag.memoryMB())
-        stack.addArrangedSubview(diag)
-        let copy = pill("📋 Health report එක copy කරන්න", theme: theme, filled: true, size: 14)
-        copy.heightAnchor.constraint(equalToConstant: 38).isActive = true
-        copy.addTarget(self, action: #selector(copyHealth), for: .touchUpInside)
-        stack.addArrangedSubview(copy)
-        header("FEEDBACK (Full Access ඕන)")
-        toggle("Key sound", SharedStore.K.sound)
-        toggle("Vibration (haptics)", SharedStore.K.haptics)
 
-        header("SWIFT AI")
-        let ai = UISegmentedControl(items: ["Gemini (free)", "OpenAI"])
-        ai.selectedSegmentIndex = store[string: SharedStore.K.aiProvider] == "openai" ? 1 : 0
-        ai.selectedSegmentTintColor = theme.accent
-        ai.setTitleTextAttributes([.foregroundColor: theme.keyText], for: .normal)
-        ai.addTarget(self, action: #selector(aiChanged(_:)), for: .valueChanged)
-        stack.addArrangedSubview(ai)
-        let keyState = UILabel()
-        keyState.text = store.aiKey.isEmpty ? "API key එකක් නැහැ" : "API key: ••••" + String(store.aiKey.suffix(4))
-        keyState.textColor = theme.specialText
-        keyState.font = .systemFont(ofSize: 13)
-        stack.addArrangedSubview(keyState)
-        let paste = pill("📋 Paste API key from clipboard", theme: theme)
-        paste.addTarget(self, action: #selector(pasteKey), for: .touchUpInside)
-        stack.addArrangedSubview(paste)
+        header("SOUND & VIBRATION")
+        toggle("Key sound", SharedStore.K.sound)
+        toggle("Vibration", SharedStore.K.haptics)
+
+        let more = pill("⚙️ තවත් settings — Swift Akuru app", theme: theme)
+        more.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        more.addTarget(self, action: #selector(openApp), for: .touchUpInside)
+        stack.addArrangedSubview(more)
 
         header("DATA")
         let words = pill("ඉගෙනගත් වචන මකන්න (\(WordStore.shared.data.words.count))", theme: theme)
@@ -588,6 +563,12 @@ final class SettingsPanel: UIView, ThemedPanel {
         about.heightAnchor.constraint(equalToConstant: 30).isActive = true
         stack.addArrangedSubview(about)
     }
+
+    @objc private func layoutChanged(_ s: UISegmentedControl) {
+        store[bool: SharedStore.K.wijesekara] = s.selectedSegmentIndex == 1
+        kb?.applySettings()
+    }
+    @objc private func openApp() { kb?.openContainingApp() }
 
     @objc private func pickTheme(_ b: UIButton) {
         store.themeId = KBTheme.all[b.tag].id
