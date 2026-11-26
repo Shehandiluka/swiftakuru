@@ -295,6 +295,10 @@ struct MoreView: View {
                 } header: { Text("🩺 Keyboard health") } footer: {
                     Text("Keyboard එක හිස්ව ආවොත් මේ කොටසේ screenshot එකක් එවන්න — හේතුව හොයාගන්න උදව් වෙනවා.")
                 }.id(diagTick)
+                Section {
+                    Text("සිංහල dictionary එක හැදුවේ මේ නිදහස් data වලින්: Leipzig Corpora Collection (CC BY), Wikipedia (CC BY-SA), OpenSubtitles / FrequencyWords (CC BY-SA 4.0). ස්තූතියි!")
+                        .font(.footnote).foregroundStyle(.secondary)
+                } header: { Text("Dictionary data") }
                 Section("Updates") {
                     HStack { Text("Version"); Spacer(); Text("\(UpdateChecker.currentVersion) (build \(UpdateChecker.currentBuild))").foregroundStyle(.secondary) }
                     Button(checking ? "Checking…" : "Update තියෙනවද බලන්න") {
