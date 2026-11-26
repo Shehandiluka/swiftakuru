@@ -73,6 +73,7 @@ final class WordStore {
 
     private init() {
         q.async { [url] in
+            BaseLexicon.shared.load()
             var model = Model()
             if let d = try? Data(contentsOf: url), let decoded = try? JSONDecoder().decode(Model.self, from: d) { model = decoded }
             var bi: [(skel: String, word: String)] = [], set: Set<String> = []
@@ -130,6 +131,13 @@ final class WordStore {
         if data.words.count > 9000 { prune() }
         dirty = true
         scheduleSave()
+    }
+
+    /// The user undid a word that space typed for this spelling → trust it less next time.
+    func untaught(_ word: String, roman: String) {
+        let r = roman.lowercased()
+        if let v = data.picks[r]?[word] { data.picks[r]?[word] = max(0, v - 4) }
+        dirty = true; scheduleSave()
     }
 
     /// "Train" from your own text (old chats, notes): learns words and which word follows which.
@@ -225,7 +233,10 @@ final class WordStore {
             var s = 0.0
             s += Swift.max(0, log2(lmP(w)) + 16) * 0.5   // how likely this word is here (frequency + the words before it)
             if let d = data.lastDay[w] { s += t - d <= 1 ? 1.0 : (t - d <= 7 ? 0.5 : 0) }
-            if builtinSet.contains(w) { s += 0.6 }
+            // the built-in dictionary: how common the word is in Sinhala, and after the previous word
+            let bc = BaseLexicon.shared.count(w)
+            if bc > 0 { s += 0.6 + 0.7 * log10(1 + Double(bc)) } else if builtinSet.contains(w) { s += 0.6 }
+            if let p = context.last { let pc = BaseLexicon.shared.pairCount(p, w); if pc > 0 { s += Swift.min(4.5, 1.1 * log2(1 + Double(pc))) } }
             return s
         }
         func add(_ w: String, _ s: Double) { score[w] = Swift.max(score[w] ?? -.infinity, s + base(w)) }
@@ -253,15 +264,24 @@ final class WordStore {
                 let ws = skeleton(w)
                 if ws == skel { add(w, 2.0) } else if skel.count >= 2, ws.hasPrefix(skel) { add(w, 0.8 - 0.15 * Double(ws.count - skel.count)) }
             }
-            var i = lowerBound(skel), seen = 0
-            while i < builtin.count, seen < 120, builtin[i].skel.hasPrefix(skel) {
-                let e = builtin[i]
-                add(e.word, e.skel == skel ? 1.6 : 0.5 - 0.12 * Double(e.skel.count - skel.count))
-                i += 1; seen += 1
+            if BaseLexicon.shared.loaded {
+                // exact sound matches + the most common words that start with this sound
+                let rows = BaseLexicon.shared.soundsLike(skel, limit: 400)
+                let exact = rows.filter { $0.skel == skel }
+                let longer = rows.filter { $0.skel != skel }.sorted { $0.count > $1.count }.prefix(40)
+                for e in exact.prefix(60) { add(e.word, 1.6) }
+                for e in longer { add(e.word, 0.5 - 0.12 * Double(e.skel.count - skel.count)) }
+            } else {
+                var i = lowerBound(skel), seen = 0
+                while i < builtin.count, seen < 120, builtin[i].skel.hasPrefix(skel) {
+                    let e = builtin[i]
+                    add(e.word, e.skel == skel ? 1.6 : 0.5 - 0.12 * Double(e.skel.count - skel.count))
+                    i += 1; seen += 1
+                }
             }
         }
         // spelling variants that are real words
-        for v in Singlish.variants(roman, limit: 12) where builtinSet.contains(v) || data.words[v] != nil { add(v, 1.8) }
+        for v in Singlish.variants(roman, limit: 12) where builtinSet.contains(v) || data.words[v] != nil || BaseLexicon.shared.count(v) > 0 { add(v, 1.8) }
 
         let ranked = score.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key.count < $1.key.count }.map { $0.key }
         // space types the top word only when you have taught it (picked it for this spelling twice or more)
@@ -271,6 +291,26 @@ final class WordStore {
         var out = [first]
         for w in ranked where w != first { out.append(w); if out.count >= max { break } }
         return (out, 0)
+    }
+
+    /// Typed-Sinhala (Wijesekara) word completions: your words first, then the dictionary, ranked by context.
+    func sinhalaCompletions(prefix: String, context: [String], max: Int = 3) -> [String] {
+        guard !prefix.isEmpty else { return [] }
+        let ctx = context.map(WordStore.clean).filter { !$0.isEmpty }
+        let lmP = data.lm.scorer(ctx)
+        var score: [String: Double] = [:]
+        func add(_ w: String, _ s: Double) {
+            var v = s + Swift.max(0, log2(lmP(w)) + 16) * 0.5
+            let bc = BaseLexicon.shared.count(w); if bc > 0 { v += 0.7 * log10(1 + Double(bc)) }
+            if let p = ctx.last { let pc = BaseLexicon.shared.pairCount(p, w); if pc > 0 { v += Swift.min(4.5, 1.1 * log2(1 + Double(pc))) } }
+            score[w] = Swift.max(score[w] ?? -.infinity, v)
+        }
+        var n = 0
+        for (w, _) in data.words where w.hasPrefix(prefix) && w != prefix { add(w, 2.5); n += 1; if n > 300 { break } }
+        for e in BaseLexicon.shared.completions(prefix, limit: 60) where e.word != prefix { add(e.word, 0) }
+        var out = score.sorted { $0.value > $1.value }.prefix(max).map { $0.key }
+        if !out.contains(prefix), BaseLexicon.shared.count(prefix) > 0 || data.words[prefix] != nil { out.insert(prefix, at: 0); out = Array(out.prefix(max)) }
+        return out
     }
 
     private func lowerBound(_ key: String) -> Int {

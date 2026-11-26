@@ -93,6 +93,36 @@ enum KeyLayout {
         return rows
     }
 
+    // MARK: Wijesekara (SLS 1134 standard Sinhala typewriter layout)
+    /// [lower, shift] for every key position; vowel signs are typed AFTER… except ෙ which is typed first, like on paper.
+    static let wijesekaraRows: [[(String, String)]] = [
+        [("ු", "ූ"), ("අ", "උ"), ("ැ", "ෑ"), ("ර", "ඍ"), ("එ", "ඔ"), ("හ", "ශ"), ("ම", "ඹ"), ("ස", "ෂ"), ("ද", "ධ"), ("ච", "ඡ")],
+        [("්", "ෟ"), ("ි", "ී"), ("ා", "ෘ"), ("ෙ", "ෆ"), ("ට", "ඨ"), ("ය", "්‍ය"), ("ව", "ළු"), ("න", "ණ"), ("ක", "ඛ"), ("ත", "ථ")],
+        [("ං", "ඞ"), ("ජ", "ඣ"), ("ඩ", "ඪ"), ("ඉ", "ඊ"), ("බ", "භ"), ("ප", "ඵ"), ("ල", "ළ"), ("ග", "ඝ")],
+    ]
+    static let wijesekaraAlts: [String: [String]] = [
+        "ච": ["ඤ", "ඥ"], "ර": ["්‍ර", "ඎ"], "ය": ["්‍ය"], "ක": ["ඛ"], "ද": ["ඳ", "ඬ"], "ග": ["ඟ", "ඝ"], "බ": ["ඹ"],
+        "ජ": ["ඦ"], "ෙ": ["ෛ", "ො", "ෝ", "ෞ"], "ා": ["ෲ"], "අ": ["ආ", "ඇ", "ඈ"], "එ": ["ඒ", "ඓ"], "ඔ": ["ඕ", "ඖ"],
+        "ං": ["ඃ"], "ඉ": ["ඊ"], "උ": ["ඌ"],
+    ]
+    static func wijesekara(upper: Bool, numberRow: Bool, showGlobe: Bool) -> [[KeySpec]] {
+        func key(_ pair: (String, String), num: String? = nil) -> KeySpec {
+            let ch = upper ? pair.1 : pair.0
+            var alts: [KeyAlt] = []
+            if let n = num { alts.append(KeyAlt(display: n, value: n, direct: true)) }
+            for a in wijesekaraAlts[ch] ?? [] { alts.append(KeyAlt(display: a, value: a, direct: true)) }
+            return KeySpec(kind: .char(ch), label: ch, alts: alts)
+        }
+        var rows: [[KeySpec]] = []
+        if numberRow { rows.append(numbers.map { KeySpec(kind: .char($0), label: $0) }) }
+        rows.append(wijesekaraRows[0].enumerated().map { key($0.element, num: numberRow ? nil : numbers[$0.offset]) })
+        rows.append(wijesekaraRows[1].map { key($0) })
+        rows.append([KeySpec(kind: .shift, label: "shift", width: 1.35), KeySpec(kind: .spacer, label: "", width: 0.15)] + wijesekaraRows[2].map { key($0) }
+                    + [KeySpec(kind: .spacer, label: "", width: 0.15), KeySpec(kind: .backspace, label: "delete", width: 1.35)])
+        rows.append(bottomRow(singlish: true, page: .letters, showGlobe: showGlobe))
+        return rows
+    }
+
     static func bottomRow(singlish: Bool, page: KeyPage, showGlobe: Bool) -> [KeySpec] {
         var r: [KeySpec] = [KeySpec(kind: .page(page == .letters ? .numbers : .letters), label: page == .letters ? "123" : "ABC", width: 1.3)]
         if showGlobe { r.append(KeySpec(kind: .globe, label: "globe", width: 1.1)) }

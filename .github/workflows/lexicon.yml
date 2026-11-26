@@ -4,7 +4,7 @@ on:
   push:
     paths: ["tools/lexicon/**"]
 permissions:
-  contents: read
+  contents: write
 jobs:
   lexicon:
     runs-on: ubuntu-latest
@@ -19,6 +19,15 @@ jobs:
           swiftc -O tools/lexicon/main.swift Shared/Singlish.swift -o /tmp/skel
           /tmp/skel tools/lexicon/out/words.tsv tools/lexicon/out/lex.tsv
           ls -la tools/lexicon/out
+      - name: Commit the lexicon into the app
+        run: |
+          cp tools/lexicon/out/lex.tsv Shared/Resources/si_lex.tsv
+          cp tools/lexicon/out/words.tsv Shared/Resources/si_words.tsv
+          cp tools/lexicon/out/bigrams.tsv Shared/Resources/si_bigrams.tsv
+          git config user.name "swiftakuru-bot"; git config user.email "bot@swiftlk.com"
+          git add Shared/Resources/si_*.tsv
+          git commit -m "Update base Sinhala lexicon" || echo "no change"
+          git pull --rebase origin ${{ github.ref_name }} && git push origin HEAD:${{ github.ref_name }}
       - uses: actions/upload-artifact@v4
         with:
           name: si-lexicon

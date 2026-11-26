@@ -532,6 +532,7 @@ final class SettingsPanel: UIView, ThemedPanel {
         toggle("Space දෙපාරක් = full stop", SharedStore.K.doubleSpace)
         toggle("Emoji suggestions", SharedStore.K.emojiSuggest)
         toggle("මම type කරන වචන ඉගෙනගන්න", SharedStore.K.learnWords)
+        toggle("සිංහල type කරන්න Wijesekara layout (Singlish වෙනුවට)", SharedStore.K.wijesekara, rebuild: true)
         toggle("Smart touch (keys දෙකක් අතර ඔබුවම ඊළඟට ඕන අකුර)", SharedStore.K.smartTouch)
         header("CLIPBOARD")
         toggle("Copy කරන දේ auto save කරන්න", SharedStore.K.clipAuto)

@@ -44,8 +44,21 @@ final class KeyboardViewController: UIInputViewController {
     static let composeHeight: CGFloat = 44
 
     /// Singlish is turned off automatically for e-mail / URL fields
+    /// Sinhala typed with the Wijesekara layout (instead of Singlish)
+    var wijesekara: Bool {
+        guard store.layout == "singlish", store[bool: SharedStore.K.wijesekara] else { return false }
+        let kt = input.keyboardType ?? .default
+        return !(kt == .URL || kt == .emailAddress)
+    }
+    /// set when ෙ (kombuva) was just typed: the next consonant goes in front of it, like writing on paper
+    private var kombuPending = false
+    /// the last Singlish word space finished, so one backspace can bring it back for editing (undo)
+    private var lastCommit: (roman: String, word: String, taught: Bool)?
+    /// don't use the taught word for this spelling (after the user undid it)
+    private var suppressTaught: String?
+
     var singlish: Bool {
-        guard store.layout == "singlish" else { return false }
+        guard store.layout == "singlish", !store[bool: SharedStore.K.wijesekara] else { return false }
         let kt = input.keyboardType ?? .default
         return !(kt == .URL || kt == .emailAddress)
     }
@@ -208,8 +221,9 @@ final class KeyboardViewController: UIInputViewController {
         let globe = needsInputModeSwitchKey
         let specs: [[KeySpec]]
         switch page {
+        case .letters where wijesekara: specs = KeyLayout.wijesekara(upper: shift > 0, numberRow: store[bool: SharedStore.K.numberRow], showGlobe: globe)
         case .letters: specs = KeyLayout.letters(singlish: singlish, upper: shift > 0, numberRow: store[bool: SharedStore.K.numberRow], hints: store[bool: SharedStore.K.keyHints], showGlobe: globe)
-        case .numbers, .symbols: specs = KeyLayout.numbersPage(symbols: page == .symbols, singlish: singlish, showGlobe: globe)
+        case .numbers, .symbols: specs = KeyLayout.numbersPage(symbols: page == .symbols, singlish: singlish || wijesekara, showGlobe: globe)
         case .sinhala1, .sinhala2, .sinhala3: specs = KeyLayout.sinhalaPage(page, showGlobe: globe)
         }
         keys.shiftState = shift
@@ -298,6 +312,8 @@ final class KeyboardViewController: UIInputViewController {
 
     func typeChar(_ c: String) {
         autocorrected = nil
+        lastCommit = nil
+        if wijesekara, page == .letters { typeWijesekara(c); return }
         if singlish, page == .letters, c.count == 1, let ch = c.first, ch.isASCII, ch.isLetter {
             composing += c
             updateComposition()
@@ -314,6 +330,28 @@ final class KeyboardViewController: UIInputViewController {
         if page == .letters { releaseShiftOnce() }
         if ".!?".contains(c) { previousWord = nil }
         updateAutoCap()
+        refreshBar()
+    }
+
+    /// Wijesekara typing. ෙ is pressed before the letter (as written); Unicode needs it after, so it is moved.
+    private func typeWijesekara(_ c: String) {
+        let consonant = c.unicodeScalars.first.map { (0x0D9A...0x0DC6).contains($0.value) } ?? false
+        if c == "ෙ" {
+            if kombuPending, (input.documentContextBeforeInput ?? "").hasSuffix("ෙ") {
+                input.deleteBackward(); input.insertText("ෛ")       // ෙ twice → ෛ (kombu deka)
+            } else {
+                input.insertText("ෙ"); kombuPending = true
+            }
+        } else if consonant, kombuPending, let before = input.documentContextBeforeInput, before.hasSuffix("ෙ") || before.hasSuffix("ෛ") {
+            let sign = before.hasSuffix("ෛ") ? "ෛ" : "ෙ"
+            input.deleteBackward()
+            input.insertText(c + sign)
+            kombuPending = false
+        } else {
+            input.insertText(c)
+            kombuPending = false
+        }
+        releaseShiftOnce()
         refreshBar()
     }
 
@@ -348,6 +386,8 @@ final class KeyboardViewController: UIInputViewController {
         guard !composing.isEmpty else { return }
         let best = bestFor?.roman == composing ? bestFor?.word : nil
         let w = word ?? best ?? Singlish.convert(composing)
+        if word == nil { lastCommit = (composing, w, w != Singlish.convert(composing)) } else { lastCommit = nil }
+        suppressTaught = nil
         if live { replaceTail(old: composedShown, with: w) } else { input.insertText(w) }
         WordStore.shared.learn(w, roman: composing, previous: previousWord, chosen: chosen, rejected: chosen ? best : nil)
         bestFor = nil
@@ -476,6 +516,18 @@ final class KeyboardViewController: UIInputViewController {
 
     // MARK: delete
     private func backspaceDown() {
+        // Undo: one backspace right after space brings the last Singlish word back to editing (and if space had
+        // swapped in a word you taught, you get your own spelling back and it is taught a little less).
+        if singlish, composing.isEmpty, let lc = lastCommit, (input.documentContextBeforeInput ?? "").hasSuffix(lc.word + " ") {
+            lastCommit = nil
+            for _ in 0..<(lc.word.count + 1) { input.deleteBackward() }
+            if lc.taught { WordStore.shared.untaught(lc.word, roman: lc.roman); suppressTaught = lc.roman }
+            composing = lc.roman
+            composedShown = ""
+            updateComposition()
+            feedbackTick()
+            return
+        }
         if let ac = autocorrected, (input.documentContextBeforeInput ?? "").hasSuffix(ac.replacement + " ") {
             for _ in 0..<(ac.replacement.count + 1) { input.deleteBackward() }
             input.insertText(ac.original)
@@ -550,12 +602,22 @@ final class KeyboardViewController: UIInputViewController {
             var list = sug.list, primary = sug.primary
             if list.isEmpty { primary = -1 }
             bestFor = list.first.map { (composing, $0) }
+            if suppressTaught == composing {
+                let direct = Singlish.convert(composing)
+                bestFor = (composing, direct)
+                list.removeAll { $0 == direct }; list.insert(direct, at: 0); list = Array(list.prefix(3))
+            }
             if list.count < 3, store[bool: SharedStore.K.emojiSuggest] { list += EmojiData.suggestions(for: composing).prefix(3 - list.count) }
             bar.showSuggestions(list, primary: primary)
             return
         }
         if !singlish, page == .letters {
             let w = currentWord()
+            if wijesekara, !w.isEmpty, Singlish.isSinhala(w), !WordStore.paused {
+                // typed Sinhala: complete the word from your words + the dictionary
+                let list = WordStore.shared.sinhalaCompletions(prefix: w, context: contextWords())
+                if !list.isEmpty { bar.showSuggestions(list, primary: -1); return }
+            }
             if !w.isEmpty, !Singlish.isSinhala(w), !WordStore.paused {   // no suggestions in private fields
                 let (list, corr) = WordStore.shared.englishSuggestions(partial: w)
                 var items = corr == nil ? WordStore.shared.rankByContext(list, context: contextWords()) : list

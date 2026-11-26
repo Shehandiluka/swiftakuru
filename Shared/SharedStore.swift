@@ -51,7 +51,7 @@ final class SharedStore {
             K.layout: "singlish", K.theme: "graphite", K.sound: true, K.haptics: true, K.autoCap: true, K.autocorrect: true,
             K.doubleSpace: true, K.livePreview: true, K.keyHints: true, K.numberRow: false, K.aiProvider: "gemini",
             K.aiModelGemini: "gemini-2.5-flash", K.aiModelOpenAI: "gpt-4.1-mini", K.clipboardMax: 40, K.keyHeight: 50.0,
-            K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false, K.nameGlow: true, K.smartTouch: true, K.seasonFx: true,
+            K.emojiSuggest: true, K.learnWords: true, K.clipAuto: false, K.nameGlow: true, K.smartTouch: true, K.seasonFx: true, K.wijesekara: false,
         ])
         restoreAIKeys()
         restoreSettings()
@@ -84,7 +84,7 @@ final class SharedStore {
         static let doubleSpace = "doubleSpace", livePreview = "livePreview", keyHints = "keyHints", numberRow = "numberRow"
         static let aiProvider = "aiProvider", aiKeyGemini = "aiKeyGemini", aiKeyOpenAI = "aiKeyOpenAI", aiModelGemini = "aiModelGemini", aiModelOpenAI = "aiModelOpenAI"
         static let clipboardMax = "clipboardMax", keyHeight = "keyHeight", shortcuts = "shortcuts", emojiSuggest = "emojiSuggest", learnWords = "learnWords"
-        static let recentEmoji = "recentEmoji", customBg = "customBg", clipAuto = "clipAuto", nameGlow = "nameGlow", smartTouch = "smartTouch", seasonFx = "seasonFx"
+        static let recentEmoji = "recentEmoji", customBg = "customBg", clipAuto = "clipAuto", nameGlow = "nameGlow", smartTouch = "smartTouch", seasonFx = "seasonFx", wijesekara = "wijesekara"
     }
 
     subscript(bool key: String) -> Bool {
@@ -155,7 +155,7 @@ final class SharedStore {
     /// Every keyboard setting that should survive an update (AI keys are kept separately above).
     static let settingKeys = [K.layout, K.theme, K.sound, K.haptics, K.autoCap, K.autocorrect, K.doubleSpace, K.livePreview, K.keyHints,
                               K.numberRow, K.aiProvider, K.aiModelGemini, K.aiModelOpenAI, K.clipboardMax, K.keyHeight, K.shortcuts,
-                              K.emojiSuggest, K.learnWords, K.clipAuto, K.nameGlow, K.smartTouch, K.seasonFx]
+                              K.emojiSuggest, K.learnWords, K.clipAuto, K.nameGlow, K.smartTouch, K.seasonFx, K.wijesekara]
     private static let settingsAccount = "settings.v1"
     private static let settingsMarker = "settingsRestoreChecked"
 
