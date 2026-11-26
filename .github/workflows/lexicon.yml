@@ -16,7 +16,7 @@ jobs:
         run: python3 build.py ../../Shared/Resources/words_si.txt
       - name: Skeleton index (same Singlish code as the keyboard)
         run: |
-          swiftc -O tools/lexicon/skel_main.swift Shared/Singlish.swift -o /tmp/skel
+          swiftc -O tools/lexicon/main.swift Shared/Singlish.swift -o /tmp/skel
           /tmp/skel tools/lexicon/out/words.tsv tools/lexicon/out/lex.tsv
           ls -la tools/lexicon/out
       - uses: actions/upload-artifact@v4

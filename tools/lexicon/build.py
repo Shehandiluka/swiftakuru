@@ -41,8 +41,9 @@ def add_sentences(lines, weight=1):
                 prev = None if not w.isspace() else prev
 
 # 1) Leipzig: use the *-sentences.txt files (id \t sentence)
-leipzig = ["sin_wikipedia_2021_300K", "sin_wikipedia_2016_100K", "sin_newscrawl_2011_300K", "sin_news_2020_300K",
-           "sin_web_2016_300K", "sin_mixed_2012_300K", "sin_community_2017"]
+leipzig = ["sin_wikipedia_2016_100K", "sin_community_2017", "sin_wikipedia_2021_100K", "sin_wikipedia_2021_30K",
+           "sin_news_2011_30K", "sin_news_2011_100K", "sin_newscrawl_2011_30K", "sin_web_2012_30K", "sin_web_2012_100K",
+           "sin-lk_web_2015_30K", "sin-lk_web_2015_100K", "sin-lk_web_2015_300K", "sin_mixed_2011_100K"]
 got = 0
 for name in leipzig:
     tgz = name + ".tar.gz"
@@ -58,7 +59,7 @@ for name in leipzig:
 print("leipzig corpora:", got, "words so far:", len(uni), flush=True)
 
 # 2) Wikipedia dump (fallback / extra)
-if got < 2 and fetch("https://dumps.wikimedia.org/siwiki/latest/siwiki-latest-pages-articles.xml.bz2", "siwiki.xml.bz2"):
+if fetch("https://dumps.wikimedia.org/siwiki/latest/siwiki-latest-pages-articles.xml.bz2", "siwiki.xml.bz2"):
     with bz2.open("siwiki.xml.bz2", "rt", encoding="utf-8", errors="ignore") as f:
         add_sentences(f)
     print("after wikipedia:", len(uni), flush=True)
