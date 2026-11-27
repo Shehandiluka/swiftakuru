@@ -83,25 +83,31 @@ final class KeyboardView: UIView {
     /// Returns P(next letter) from the personal language model, or nil when smart touch is off.
     var nextLetterProbability: ((String) -> Double?)?
 
-    /// Smart touch: the system keyboard trick — when a finger lands near the edge between letter keys, the touch goes to
-    /// the key that combines "how close" (a 2-D Gaussian around each key centre) with "how likely next" (letter model).
-    /// A tap clearly inside a key always stays on that key.
+    /// Which key gets a touch.
+    /// 1. Finger on a key's face → always that key (no guessing).
+    /// 2. Finger in the gap between keys → the NEAREST key face (before, the overlapping hit areas let the key on the
+    ///    right/below win, so taps between two keys often went to the wrong one).
+    /// 3. Only when two letters are practically equally near (within 2.5 pt) does the next-letter model break the tie.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
-        guard let b = hit as? KeyButton, case .char(let c0) = b.spec.kind, c0.count == 1, altView == nil,
-              let prob = nextLetterProbability, let p0 = prob(c0.lowercased()) else { return hit }
-        var best = b, bestScore = -1.0
-        for k in rows.flatMap({ $0 }) where !k.isHidden {
-            guard case .char(let c) = k.spec.kind, c.count == 1, c.first?.isLetter == true else { continue }
-            let f = k.frame, w = max(f.width, 1), h = max(f.height, 1)
-            guard f.insetBy(dx: -w * 0.3, dy: -h * 0.15).contains(point) else { continue }
-            let dx = (point.x - f.midX) / (w * 0.45), dy = (point.y - f.midY) / (h * 0.55)
-            let spatial = exp(-(dx * dx + dy * dy) / 2)
-            let pk = k === b ? p0 : (prob(c.lowercased()) ?? 0)
-            let score = spatial * pow(max(pk, 1e-6), 0.5)
-            if score > bestScore { bestScore = score; best = k }
+        guard altView == nil, !isHidden, isUserInteractionEnabled, bounds.contains(point) else { return super.hitTest(point, with: event) }
+        var best: KeyButton?, bestD = CGFloat.infinity
+        var second: KeyButton?, secondD = CGFloat.infinity
+        for k in rows.flatMap({ $0 }) where !k.isHidden && k.isUserInteractionEnabled {
+            let r = k.frame.insetBy(dx: 3, dy: 5.5)               // the visible key face
+            let dx = max(r.minX - point.x, 0, point.x - r.maxX)
+            let dy = max(r.minY - point.y, 0, point.y - r.maxY)
+            let d = (dx * dx + dy * dy).squareRoot()
+            if d < bestD { second = best; secondD = bestD; best = k; bestD = d }
+            else if d < secondD { second = k; secondD = d }
         }
-        return best
+        guard let b = best else { return super.hitTest(point, with: event) }
+        if bestD == 0 { return b }
+        if let s = second, secondD - bestD < 2.5,
+           case .char(let c1) = b.spec.kind, case .char(let c2) = s.spec.kind, c1.count == 1, c2.count == 1,
+           let prob = nextLetterProbability, let p1 = prob(c1.lowercased()), let p2 = prob(c2.lowercased()), p2 > p1 * 3 {
+            return s
+        }
+        return b
     }
 
     var nameGlowEnabled = true { didSet { if !nameGlowEnabled { stopNameGlow() } } }

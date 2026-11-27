@@ -81,7 +81,7 @@ enum KBDiag {
     static func memoryWarning() { d.set(d.integer(forKey: "diag.memWarn") + 1, forKey: "diag.memWarn") }
 
     static var report: [(String, String)] {
-        [("Install", (Bundle.main.object(forInfoDictionaryKey: "ALTDeviceID") != nil || hostInfo("ALTDeviceID") != nil) ? "SideStore / AltStore" : "වෙනත් (3uTools / ad-hoc)"),
+        [("Install", (Bundle.main.object(forInfoDictionaryKey: "ALTDeviceID") != nil || hostInfo("ALTDeviceID") != nil || SharedStore.shared.activeGroup != nil) ? "SideStore / AltStore ✓" : "වෙනත් (3uTools / ad-hoc)"),
          ("Bundle", String((Bundle.main.bundleIdentifier ?? "?").suffix(32))),
          ("App Group", SharedStore.shared.activeGroup.map { String($0.suffix(28)) } ?? "❌ නැහැ (app ↔ keyboard වෙන වෙනම)"),
          ("Keychain", d.object(forKey: "diag.keychain") == nil ? "—" : (d.integer(forKey: "diag.keychain") == 0 ? "✓ OK" : "❌ \(d.integer(forKey: "diag.keychain"))")),
