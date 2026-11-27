@@ -722,6 +722,16 @@ final class KeyboardViewController: UIInputViewController {
     }
     private func updatePrivacy() { WordStore.paused = sensitiveField }
 
+    /// `textDocumentProxy.documentIdentifier` is declared non-optional, but iOS sometimes has no document yet
+    /// (keyboard just loading, field not attached). Reading it directly then crashed the keyboard → blank keyboard.
+    /// Read it through Objective-C so a missing id is simply nil.
+    private var safeDocumentId: UUID? {
+        let proxy = textDocumentProxy as AnyObject
+        let sel = NSSelectorFromString("documentIdentifier")
+        guard proxy.responds(to: sel), let v = proxy.perform(sel)?.takeUnretainedValue() else { return nil }
+        return (v as? NSUUID).map { $0 as UUID } ?? (v as? UUID)
+    }
+
     /// The last (up to 3) finished words before the cursor — the context the language model predicts from.
     func contextWords() -> [String] {
         var before = input.documentContextBeforeInput ?? ""
@@ -822,7 +832,7 @@ final class KeyboardViewController: UIInputViewController {
     // MARK: UITextInputDelegate
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
-        let docId = textDocumentProxy.documentIdentifier
+        let docId = safeDocumentId
         if docId != lastDocumentId {
             lastDocumentId = docId
             updatePrivacy()
